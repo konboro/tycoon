@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pl" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transport Tycoon: Edycja Finalna</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <div id="auth-modal" class="fixed inset-0 bg-gray-900 z-[100] flex items-center justify-center">
+        <div class="bg-gray-800 p-8 rounded-xl border border-gray-700 shadow-2xl w-full max-w-md">
+            <div class="text-center mb-8">
+                <div class="text-6xl mb-4">🌍</div>
+                <h1 class="text-3xl font-bold text-white">Transport Tycoon</h1>
+                <p class="text-gray-400 mt-2">Zaloguj się, aby zarządzać imperium</p>
+            </div>
+            <div class="space-y-4">
+                <div><label class="block text-sm font-medium text-gray-400 mb-1">Email</label><input type="email" id="auth-email" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition" placeholder="prezes@firma.com"></div>
+                <div><label class="block text-sm font-medium text-gray-400 mb-1">Hasło</label><input type="password" id="auth-password" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition" placeholder="••••••••"></div>
+                <div id="auth-error" class="text-red-500 text-sm text-center hidden"></div>
+                <button id="btn-login" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition mt-2">Zaloguj się</button>
+                <button id="btn-register" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 rounded-lg transition">Załóż nowe konto</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app" class="h-screen w-screen flex">
+        <nav class="h-full w-16 bg-gray-900 border-r border-gray-800 z-30 flex flex-col items-center py-4 gap-2">
+            <button data-nav-tab="profile" class="group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-building-4-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Profil</span></button>
+            <hr class="w-10 border-gray-700 my-1">
+            <button data-nav-tab="stations" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-community-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Infrastruktura</span></button>
+            <button data-nav-tab="store" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-store-2-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Sklep</span></button>
+            <button data-nav-tab="fleet" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-bus-wifi-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Flota</span></button>
+            <button data-nav-tab="market" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-shopping-bag-3-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Giełda</span></button>
+            <button data-nav-tab="guild" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-group-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Gildia</span></button>
+            <button data-nav-tab="friends" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-user-heart-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Znajomi</span></button>
+            <button data-nav-tab="lootbox" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-gift-2-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Skrzynki</span></button>
+            <button data-nav-tab="achievements" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-trophy-line text-2xl"></i><span id="ach-notification-dot" class="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-gray-900 hidden"></span><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Osiągnięcia</span></button>
+            <div class="flex-grow"></div>
+            <button data-nav-tab="stats" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-bar-chart-2-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Statystyki</span></button>
+            <button data-nav-tab="rankings" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-award-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Ranking</span></button>
+            <button data-nav-tab="transactions" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-history-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Historia</span></button>
+            <button data-nav-tab="company" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-settings-3-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Firma</span></button>
+            <button data-nav-tab="energy" class="nav-item group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"><i class="ri-gas-station-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Energia</span></button>
+            <hr class="w-10 border-gray-700 my-1">
+            <button id="resetAll" class="group relative w-12 h-12 flex items-center justify-center rounded-lg text-gray-400 hover:bg-red-800 hover:text-white transition-colors"><i class="ri-delete-bin-line text-2xl"></i><span class="nav-tooltip absolute left-16 w-max bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-md">Resetuj</span></button>
+        </nav>
+
+        <main class="flex-grow relative overflow-hidden flex flex-col">
+            <header id="kpi-panel" class="bg-gradient-to-b from-gray-900 to-gray-800 p-3 shadow-lg border-b-4 border-blue-500">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <span id="company-logo" class="text-3xl"></span>
+                            <div>
+                                <h1 id="company-name" class="text-xl font-bold text-white leading-tight"></h1>
+                                <button id="edit-company-name-btn" class="text-xs text-gray-400 hover:text-white transition-colors -mt-1">Zmień nazwę <i class="ri-pencil-line ri-xs"></i></button>
+                            </div>
+                        </div>
+                        <div class="bg-gray-900/50 p-2 rounded-lg border border-gray-700/50 w-48">
+                            <div class="flex justify-between items-center text-sm text-gray-400 mb-1">
+                                <span>Poziom <span id="level" class="font-bold text-white">1</span></span>
+                                <span class="text-xs">XP: <span id="xp">0</span> / <span id="xpNext">100</span></span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-1.5"><div id="xpProgressBar" class="bg-blue-500 h-1.5 rounded-full" style="width: 0%"></div></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-6">
+                        <div class="text-center">
+                            <div class="text-sm text-gray-400">Finanse</div>
+                            <div class="text-2xl font-bold text-green-400"><span id="wallet">0</span> VC</div>
+                        </div>
+                         <div id="hourly-earnings-odometer" class="odometer-container"></div>
+                        <div class="flex flex-col">
+                          <div class="flex gap-4">
+                            <div class="flex items-center gap-2 text-lg"><i class="ri-roadster-line text-blue-400"></i><span id="owned-vehicles-count" class="font-bold">0</span></div>
+                            <div class="flex items-center gap-2 text-lg"><i class="ri-community-line text-amber-400"></i><span id="owned-buildings-count" class="font-bold">0</span></div>
+                          </div>
+                          <div class="mt-1 text-xs text-gray-400">Wartość aktywów: <span id="estimated-assets" class="font-semibold text-blue-400">0</span> VC</div>
+                        </div>
+                    </div>
+                    <span class="text-xs font-semibold bg-gray-700 text-gray-300 px-2 py-1 rounded-full">v9.2</span>
+                </div>
+            </header>
+
+            <div class="flex-grow relative">
+                <div id="map" class="h-full w-full z-0"></div>
+                <aside id="content-panel" class="absolute top-0 left-0 h-full w-full max-w-md bg-gray-900/80 backdrop-blur-sm border-r border-gray-700/60 shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out z-20 flex flex-col">
+                    <header class="p-4 border-b border-gray-700/60 flex items-center justify-between">
+                        <h2 id="panel-title" class="text-xl font-bold text-white"></h2>
+                        <button id="close-content-panel" class="text-gray-400 hover:text-white"><i class="ri-close-line text-2xl"></i></button>
+                    </header>
+                    <div id="panel-controls" class="p-4 border-b border-gray-700/60 hidden">
+                         <div class="flex gap-2 mb-3">
+                            <input type="search" id="search" placeholder="Szukaj..." class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                            <button id="refreshAll" class="bg-gray-700 hover:bg-gray-600 text-white font-medium py-1.5 px-3 rounded-md transition-colors"><i class="ri-refresh-line"></i></button>
+                        </div>
+                        <details class="bg-gray-800/50 rounded-lg border border-gray-700/50">
+                            <summary class="cursor-pointer p-2 text-sm font-medium text-gray-300">Filtry</summary>
+                            <div id="filters-container" class="p-3 border-t border-gray-700/50 grid grid-cols-2 gap-4"></div>
+                        </details>
+                    </div>
+                    <main id="mainList" class="flex-grow overflow-y-auto p-2 space-y-3"></main>
+                    <footer id="status-bar" class="p-2 text-xs text-center text-gray-500 border-t border-gray-700/60 bg-gray-900/50">Inicjalizacja...</footer>
+                </aside>
+                <div id="vehicle-card" class="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl bg-gray-800/80 backdrop-blur-sm border-t-4 border-transparent p-4 rounded-t-lg transform translate-y-full transition-transform duration-300 ease-in-out z-10 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.3)]"></div>
+                <div id="notification-container" class="absolute top-4 right-4 z-50 flex flex-col gap-2"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="modals">
+        <div id="lootbox-prize-modal" class="fixed inset-0 bg-black/70 z-50 hidden items-center justify-center text-center"><div class="bg-gray-800 p-6 rounded-lg border border-gray-700 w-full max-w-md"><h3 id="prize-title" class="text-2xl font-bold mb-4">Otrzymujesz...</h3><div id="prize-reveal" class="h-48 mb-4"><div id="prize-card" class="w-full h-full relative"><div class="prize-card-face absolute w-full h-full flex items-center justify-center rounded-lg bg-gray-700 text-7xl">🎁</div><div id="prize-card-back" class="prize-card-face prize-card-back absolute w-full h-full flex items-center justify-center rounded-lg bg-gray-900 border-l-8"><div id="prize-details"></div></div></div></div><p id="prize-message" class="min-h-[20px] mb-4 text-gray-300"></p><button id="close-prize-modal" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-md transition">Zamknij</button></div></div>
+        <div id="sell-modal" class="fixed inset-0 bg-black/70 z-50 hidden items-center justify-center"><div class="bg-gray-800 p-6 rounded-lg border border-gray-700 w-full max-w-md"><h3 class="text-xl font-bold mb-2">Sprzedaj Pojazd</h3><p id="sell-modal-text" class="text-gray-400 mb-4"></p><div class="space-y-4"><div><label for="sell-price" class="block text-sm font-medium text-gray-300 mb-1">Cena (VC)</label><input type="number" id="sell-price" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" min="1"></div><div><label for="sell-duration" class="block text-sm font-medium text-gray-300 mb-1">Czas trwania</label><select id="sell-duration" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"><option value="1">1 godzina</option><option value="6">6 godzin</option><option value="12">12 godzin</option><option value="24">24 godziny</option></select></div></div><div id="sell-modal-info" class="text-xs text-gray-400 bg-gray-900/50 p-2 rounded-md mt-4"></div><div class="flex gap-3 mt-6"><button id="cancel-sell-btn" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition">Anuluj</button><button id="confirm-sell-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-md transition">Wystaw</button></div></div></div>
+        <div id="asset-details-modal" class="fixed inset-0 bg-black/70 z-50 hidden items-center justify-center"><div class="bg-gray-800 p-6 rounded-lg border border-gray-700 w-full max-w-2xl"><div class="flex items-start justify-between mb-4"><div class="flex items-center gap-4"><div id="asset-details-icon" class="text-5xl"></div><h3 id="asset-details-title" class="text-2xl font-bold"></h3></div><button id="close-asset-details-modal" class="text-gray-400 hover:text-white"><i class="ri-close-line text-2xl"></i></button></div><div id="asset-details-grid" class="bg-gray-900/50 p-4 rounded-md mb-4 text-sm"></div><h4 class="font-semibold mb-2">Historia Zysków</h4><div class="h-48 relative"><canvas id="asset-earnings-chart"></canvas></div></div></div>
+        <div id="confirm-modal" class="fixed inset-0 bg-black/70 z-50 hidden items-center justify-center"><div class="bg-gray-800 p-6 rounded-lg border border-gray-700 w-full max-w-sm text-center"><h3 class="text-lg font-bold mb-4">Potwierdzenie</h3><p id="confirm-modal-text" class="text-gray-300 mb-6"></p><div class="flex gap-3"><button id="confirm-cancel-btn" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition">Anuluj</button><button id="confirm-ok-btn" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-md transition">Potwierdź</button></div></div></div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

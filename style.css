@@ -1,0 +1,37 @@
+body { font-family: 'Inter', sans-serif; overflow: hidden; }
+.leaflet-marker-icon.is-moving { animation: pulse 2s infinite; border-radius: 50%; }
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+    70% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+.player-location-icon { font-size: 32px; text-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
+.rarity-common { border-left-color: #9ca3af; }
+.rarity-rare { border-left-color: #3b82f6; }
+.rarity-epic { border-left-color: #8b5cf6; }
+.rarity-legendary { border-left-color: #f59e0b; }
+.card-rarity-common { border-top-color: #9ca3af; }
+.card-rarity-rare { border-top-color: #3b82f6; }
+.card-rarity-epic { border-top-color: #8b5cf6; }
+.card-rarity-legendary { border-top-color: #f59e0b; }
+#prize-reveal { perspective: 1000px; }
+#prize-card { transform-style: preserve-3d; transition: transform 0.8s; }
+#prize-card.is-flipped { transform: rotateY(180deg); }
+.prize-card-face { backface-visibility: hidden; }
+.prize-card-back { transform: rotateY(180deg); }
+.nav-tooltip { visibility: hidden; opacity: 0; transition: opacity 0.2s, visibility 0.2s; }
+.group:hover .nav-tooltip { visibility: visible; opacity: 1; }
+.station-details-container { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; background-color: rgba(17, 24, 39, 0.5); }
+.station-details-container.visible { max-height: 1000px; }
+.carousel-track-container { flex-grow: 1; overflow: hidden; }
+.carousel-track { display: flex; height: 100%; transition: transform 0.3s ease-in-out; }
+.carousel-slide { width: 100%; flex-shrink: 0; padding: 0 4px; box-sizing: border-box; }
+.chart-wrapper { height: 100%; display: flex; flex-direction: column; }
+#guild-chat-messages { scroll-behavior: smooth; }
+#mainList::-webkit-scrollbar { width: 6px; }
+#mainList::-webkit-scrollbar-track { background: #1f2937; }
+#mainList::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+#mainList::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+.odometer-container { font-family: 'Roboto Mono', monospace; background: #111827; padding: 4px 8px; border-radius: 6px; display: inline-flex; gap: 2px; border: 1px solid #374151; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
+.odometer-digit { background-color: #1f2937; color: #16a34a; padding: 2px 4px; border-radius: 3px; font-size: 1.125rem; line-height: 1.5rem; font-weight: 700; text-shadow: 0 0 5px rgba(22, 163, 74, 0.7); }
+.odometer-label { font-size: 0.75rem; color: #9ca3af; align-self: flex-end; margin-left: 4px; padding-bottom: 2px; }
