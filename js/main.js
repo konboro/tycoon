@@ -4,8 +4,8 @@ import { fetchPlanes, fetchBUS, fetchTUBE, fetchFI, fetchEnergyPrices, fetchGlob
 import { tickEconomy, tickAllInfrastructure } from './logic.js';
 import { setupEventListeners, render, updateUI, showPlayerLocation, generateAIPlayers, logDailyEarnings, updateRankings, redrawMap } from './ui.js';
 import { handleLogin, handleRegister } from './supabase.js';
-import { map } from './state.js';
 
+export const map = L.map('map', { zoomControl: true }).setView([52.23, 21.01], 6);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM &copy; CARTO', maxZoom: 19 }).addTo(map);
 
 async function init() {
