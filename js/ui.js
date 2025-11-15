@@ -4,7 +4,7 @@ import { config, lootboxConfig } from './config.js';
 import { supabase } from './supabase.js';
 import { $, fmt, showNotification, showConfirm, getProximityBonus, getWeatherIcon, ICONS, createIcon, getVehicleRarity } from './utils.js';
 import { fetchGlobalTakenVehicles } from './api.js';
-import { map } from './main.js';
+import { map } from './state.js';
 
 // ===== 1. FUNKCJE POMOCNICZE (AKCJE) =====
 

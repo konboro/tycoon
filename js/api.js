@@ -3,18 +3,46 @@ import { PROXIES, countryCoords, genericWeather } from './config.js';
 import { jitter } from './utils.js'; // <--- TU BYŁ BŁĄD (usunąłem getJSON z importu)
 import { supabase } from './supabase.js';
 
-// Helper dla API (Zostawiamy tę definicję tutaj)
-async function getJSON(url) { 
-    for (const p of PROXIES) { 
-        try { 
-            const r = await fetch(p + url); 
-            if (!r.ok) throw new Error(`HTTP ${r.status}`); 
-            return await r.json(); 
-        } catch (e) {} 
-    } 
-    return null; 
-}
+// Wklej to do js/api.js zamiast obecnej funkcji getJSON
 
+const cache = new Map();
+
+async function getJSON(url) {
+    // 1. Sprawdź czy mamy świeże dane w cache (mniej niż 30 sekund)
+    if (cache.has(url)) {
+        const { data, timestamp } = cache.get(url);
+        if (Date.now() - timestamp < 30000) return data;
+    }
+
+    // 2. Lista proxy do sprawdzenia
+    const proxies = [
+        'https://api.allorigins.win/raw?url=',
+        'https://corsproxy.io/?',
+        '' // Bez proxy (dla API, które mają CORS włączony)
+    ];
+
+    for (const proxy of proxies) {
+        try {
+            // Dla OpenSky musimy użyć proxy, dla innych niekoniecznie
+            const targetUrl = (url.includes('opensky') && proxy === '') ? null : proxy + encodeURIComponent(url);
+            if (!targetUrl && proxy === '') continue;
+
+            const finalUrl = proxy === '' ? url : proxy + url;
+            
+            const r = await fetch(finalUrl);
+            if (!r.ok) continue; // Jak błąd, spróbuj następne proxy
+            
+            const data = await r.json();
+            
+            // Zapisz w cache
+            cache.set(url, { data, timestamp: Date.now() });
+            return data;
+        } catch (e) {
+            console.warn(`Proxy ${proxy} failed for ${url}`);
+        }
+    }
+    return null; // Jak nic nie zadziałało
+}
 export async function fetchGlobalTakenVehicles() {
     const { data } = await supabase.from('vehicles').select('vehicle_api_id, type');
     if (data) { 
