@@ -1,68 +1,51 @@
 import { state, achievementsList, logTransaction } from './state.js';
 import { config, lootboxConfig } from './config.js';
 import { supabase } from './supabase.js';
-import { $, fmt, showNotification, showConfirm, getProximityBonus, getWeatherIcon, ICONS, createIcon, getVehicleRarity } from './utils.js';
+import { $, fmt, showNotification, showConfirm, getProximityBonus, getWeatherIcon, ICONS, createIcon, getVehicleRarity, getIconHtml } from './utils.js';
 import { fetchGlobalTakenVehicles } from './api.js';
-import { map } from './state.js';
+import { map } from './state.js'; // Import mapy ze state.js
 
-// ===== 1. FUNKCJE POMOCNICZE (AKCJE GRACZA) =====
+// ===== 1. FUNKCJE POMOCNICZE (AKCJE) =====
 
 function openLootbox(boxType) {
     const box = lootboxConfig[boxType];
     if (state.wallet < box.cost) return;
     state.wallet -= box.cost;
     logTransaction(-box.cost, `Zakup: ${box.name}`);
-    
     const rand = Math.random();
-    let cumulativeProb = 0;
-    let prizeRarity = 'common';
+    let cumulativeProb = 0; let prizeRarity = 'common';
     for (const rarity in box.drops) { cumulativeProb += box.drops[rarity]; if (rand < cumulativeProb) { prizeRarity = rarity; break; } }
-    
     let unownedVehicles = [];
-    Object.values(state.vehicles).forEach(map => { for (const v of map.values()) { if (!state.owned[`${v.type}:${v.id}`]) { unownedVehicles.push(v); } } });
-    if (box.type) { unownedVehicles = unownedVehicles.filter(v => v.type === box.type); }
-    
+    Object.values(state.vehicles).forEach(map => { for (const v of map.values()) { if (!state.owned[`${v.type}:${v.id}`]) unownedVehicles.push(v); } });
+    if (box.type) unownedVehicles = unownedVehicles.filter(v => v.type === box.type);
     let prizePool = unownedVehicles.filter(v => getVehicleRarity(v) === prizeRarity);
     if (prizePool.length === 0) { const rarities = ['legendary', 'epic', 'rare', 'common']; for (let i = rarities.indexOf(prizeRarity) + 1; i < rarities.length; i++) { prizePool = unownedVehicles.filter(v => getVehicleRarity(v) === rarities[i]); if (prizePool.length > 0) break; } }
     
-    const modal = $('lootbox-prize-modal');
-    const prizeCard = $('prize-card');
-    prizeCard.classList.remove('is-flipped');
-    modal.style.display = 'flex';
-    
+    const modal = $('lootbox-prize-modal'); const prizeCard = $('prize-card');
+    prizeCard.classList.remove('is-flipped'); modal.style.display = 'flex';
     setTimeout(() => {
         prizeCard.classList.add('is-flipped');
         if (prizePool.length > 0) {
             const prize = prizePool[Math.floor(Math.random() * prizePool.length)];
             const key = `${prize.type}:${prize.id}`;
             const rarity = getVehicleRarity(prize);
-            // Dodajemy pojazd (lokalnie, save zrobi sync)
             state.owned[key] = { ...prize, odo_km: 0, earned_vc: 0, wear: 0, purchaseDate: new Date().toISOString(), customName: null, level: 1, totalEnergyCost: 0, earningsLog: [], serviceHistory: [] };
-            
-            // Zapis do bazy od razu (dla bezpieczeństwa)
             (async () => {
                 const user = (await supabase.auth.getUser()).data.user;
                 if(user) {
-                    await supabase.from('vehicles').insert([{
-                        owner_id: user.id,
-                        vehicle_api_id: prize.id,
-                        type: prize.type,
-                        custom_name: prize.title,
-                        wear: 0,
-                        is_moving: false
-                    }]);
+                    await supabase.from('vehicles').insert([{ owner_id: user.id, vehicle_api_id: prize.id, type: prize.type, custom_name: prize.title, wear: 0, is_moving: false }]);
                     await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', user.id);
                 }
             })();
-
             $('prize-title').textContent = "Gratulacje!";
             $('prize-card-back').className = `prize-card-face prize-card-back absolute w-full h-full flex items-center justify-center rounded-lg bg-gray-900 border-l-8 rarity-${rarity}`;
-            $('prize-details').innerHTML = `<div class="text-5xl">${ICONS[prize.type]}</div><h4 class="text-lg font-bold mt-2">${prize.title}</h4>`;
+            $('prize-details').innerHTML = `<div class="w-32 h-32 mx-auto">${getIconHtml(prize.type)}</div><h4 class="text-lg font-bold mt-4">${prize.title}</h4>`;
             $('prize-message').textContent = "Pojazd został dodany do Twojej floty!";
         } else {
             const fallbackVC = Math.round(box.cost * 0.5);
             state.wallet += fallbackVC;
             logTransaction(fallbackVC, "Zwrot za skrzynkę");
+            (async () => { const user = (await supabase.auth.getUser()).data.user; if(user) await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', user.id); })();
             $('prize-title').textContent = "Pech!";
             $('prize-card-back').className = `prize-card-face prize-card-back absolute w-full h-full flex items-center justify-center rounded-lg bg-gray-900 border-l-8 border-gray-500`;
             $('prize-details').innerHTML = `<h4 class="text-lg font-bold">Brak dostępnych pojazdów</h4>`;
@@ -77,13 +60,11 @@ function quickSellVehicle(key) {
     if (!vehicle) return;
     const basePrice = config.basePrice[vehicle.type] || 0;
     const sellPrice = Math.round(basePrice * 0.40);
-    showConfirm(`Czy na pewno chcesz szybko sprzedać ${vehicle.customName || vehicle.title} za ${fmt(sellPrice)} VC (40% wartości)?`, () => {
+    showConfirm(`Sprzedać ${vehicle.customName || vehicle.title} za ${fmt(sellPrice)} VC?`, () => {
         state.wallet += sellPrice;
         logTransaction(sellPrice, `Szybka sprzedaż: ${vehicle.customName || vehicle.title}`);
         delete state.owned[key];
         state.selectedVehicleKey = null;
-        
-        // Usuwanie z bazy
         (async () => {
             const user = (await supabase.auth.getUser()).data.user;
             if(user) {
@@ -91,8 +72,7 @@ function quickSellVehicle(key) {
                await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', user.id);
             }
         })();
-
-        showNotification(`Sprzedano ${vehicle.customName || vehicle.title} za ${fmt(sellPrice)} VC.`);
+        showNotification(`Sprzedano za ${fmt(sellPrice)} VC.`);
         render();
     });
 }
@@ -102,39 +82,32 @@ function openSellModal(key) {
     if (!vehicle) return;
     const modal = $('sell-modal');
     const basePrice = config.basePrice[vehicle.type] || 0;
-    
-    $('sell-modal-text').textContent = `Wystawiasz na sprzedaż: ${vehicle.customName || vehicle.title}`;
+    $('sell-modal-text').textContent = `Wystawiasz: ${vehicle.customName || vehicle.title}`;
     const priceInput = $('sell-price');
     priceInput.value = basePrice;
-    
     const infoEl = $('sell-modal-info');
     const updateConfirmation = () => {
         const price = parseInt(priceInput.value) || 0;
         const commission = Math.round(price * 0.05);
-        const profit = price - commission;
-        infoEl.innerHTML = `Prowizja (5%): ${fmt(commission)} VC<br>Otrzymasz: ${fmt(profit)} VC`;
+        infoEl.innerHTML = `Prowizja (5%): ${fmt(commission)} VC<br>Otrzymasz: ${fmt(price - commission)} VC`;
     };
-    
     priceInput.addEventListener('input', updateConfirmation);
     updateConfirmation();
-    
     modal.style.display = 'flex';
     const confirmBtn = $('confirm-sell-btn');
     const newConfirmBtn = confirmBtn.cloneNode(true);
     confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-
     newConfirmBtn.onclick = () => {
         const price = parseInt(priceInput.value);
-        if (isNaN(price) || price <= 0) { showNotification("Wprowadź poprawną cenę.", true); return; }
+        if (isNaN(price) || price <= 0) { showNotification("Błędna cena.", true); return; }
         const commission = Math.round(price * 0.05);
         state.wallet -= commission;
-        logTransaction(-commission, `Prowizja giełdowa: ${vehicle.customName || vehicle.title}`);
+        logTransaction(-commission, `Prowizja: ${vehicle.customName}`);
         const durationHours = parseInt($('sell-duration').value);
-        
-        state.marketListings.push({ vehicle: { ...vehicle }, price: price, expiresAt: new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString(), seller: state.profile.companyName });
+        state.marketListings.push({ vehicle: { ...vehicle }, price: price, expiresAt: new Date(Date.now() + durationHours * 3600000).toISOString(), seller: state.profile.companyName });
         delete state.owned[key];
         state.selectedVehicleKey = null;
-        showNotification(`Wystawiono ${vehicle.customName || vehicle.title} na giełdę za ${fmt(price)} VC.`);
+        showNotification(`Wystawiono na giełdę.`);
         render();
         modal.style.display = 'none';
     };
@@ -147,165 +120,81 @@ function upgradeVehicle(key) {
     const cost = config.upgrade.costs[nextLevelIndex];
     if (state.wallet >= cost) {
         state.wallet -= cost;
-        logTransaction(-cost, `Ulepszenie: ${ownedData.customName || ownedData.title}`);
+        logTransaction(-cost, `Ulepszenie: ${ownedData.customName}`);
         ownedData.level = (ownedData.level || 1) + 1;
         state.profile.upgrades_done++;
         render();
-    } else {
-        showNotification("Brak środków na ulepszenie!", true);
-    }
+    } else { showNotification("Brak środków!", true); }
 }
 
 function editVehicleName(key) {
     const ownedData = state.owned[key];
     if (!ownedData) return;
-    const currentName = ownedData.customName || ownedData.title;
-    const newName = prompt(`Zmień nazwę dla "${currentName}":`, currentName);
-    if (newName && newName.trim() !== "") {
-        ownedData.customName = newName.trim();
-        render();
-    }
+    const newName = prompt(`Nowa nazwa:`, ownedData.customName);
+    if (newName && newName.trim() !== "") { ownedData.customName = newName.trim(); render(); }
 }
 
 function calculateStatsFromLog(log, valueKey, periodHours) {
     const now = Date.now();
-    const periodMs = periodHours * 60 * 60 * 1000;
-    return log.filter(entry => now - entry.timestamp < periodMs)
-              .reduce((sum, entry) => sum + (entry[valueKey] || 0), 0);
+    const periodMs = periodHours * 3600000;
+    return log.filter(entry => now - entry.timestamp < periodMs).reduce((sum, entry) => sum + (entry[valueKey] || 0), 0);
 }
 
 export function openAssetDetailsModal(key) {
     const [assetType, ...idParts] = key.split(':');
     const id = idParts.join(':');
     let asset, isVehicle = true, title;
-
     if (assetType === 'station') {
         const stationConfig = config.infrastructure[id];
         const { type } = stationConfig;
-        const category = type === 'river-bus' ? 'riverPiers' : type + 'Terminals';
-        asset = state.infrastructure[type === 'train' ? 'trainStations' : type === 'tube' ? 'tubeStations' : type === 'cable' ? 'cableCar' : category][id];
-        title = stationConfig.name;
-        asset.type = stationConfig.type;
-        isVehicle = false;
-    } else {
-        asset = state.owned[key];
-        title = asset.customName || asset.title;
-    }
+        let cat; 
+        switch(type) { case 'train': cat='trainStations'; break; case 'tube': cat='tubeStations'; break; case 'cable': cat='cableCar'; break; case 'river-bus': cat='riverPiers'; break; case 'bus': cat='busTerminals'; break; }
+        asset = state.infrastructure[cat][id];
+        title = stationConfig.name; isVehicle = false; asset.type = stationConfig.type;
+    } else { asset = state.owned[key]; title = asset.customName || asset.title; }
     if (!asset) return;
 
     const modal = $('asset-details-modal');
-    $('asset-details-icon').innerHTML = isVehicle 
-        ? `<div class="text-5xl">${ICONS[asset.type] || '❓'}</div>`
-        : `<div class="text-5xl">${ICONS['station_' + asset.type]}</div>`;
+    $('asset-details-icon').innerHTML = isVehicle ? `<div class="w-16 h-16">${getIconHtml(asset.type)}</div>` : `<div class="w-16 h-16">${getIconHtml('station_' + asset.type)}</div>`;
     $('asset-details-title').textContent = title;
-
     const grid = $('asset-details-grid');
     const log = asset.earningsLog || [];
-
     const profit_1h = calculateStatsFromLog(log, 'profit', 1);
-    const profit_24h = calculateStatsFromLog(log, 'profit', 24);
     const profit_total = asset.earned_vc || asset.totalEarnings || 0;
-
-    let statsHtml = `
-        <div class="col-span-1 text-gray-400 font-semibold">Wskaźnik</div>
-        <div class="col-span-1 text-gray-400 font-semibold text-right">Ostatnia 1h</div>
-        <div class="col-span-1 text-gray-400 font-semibold text-right">Ostatnie 24h</div>
-        <div class="col-span-1 text-gray-400 font-semibold text-right">Łącznie</div>
-        <div class="col-span-4 border-t border-gray-700/50 my-1"></div>
-        <div class="col-span-1">Zysk Netto</div>
-        <div class="col-span-1 text-right font-medium">${fmt(profit_1h)} VC</div>
-        <div class="col-span-1 text-right font-medium">${fmt(profit_24h)} VC</div>
-        <div class="col-span-1 text-right font-medium">${fmt(profit_total)} VC</div>
-    `;
-
-    if (isVehicle) {
-        const km_1h = calculateStatsFromLog(log, 'km', 1);
-        const km_24h = calculateStatsFromLog(log, 'km', 24);
-        const km_total = asset.odo_km || 0;
-        statsHtml += `
-            <div class="col-span-1">Dystans</div>
-            <div class="col-span-1 text-right font-medium">${km_1h.toFixed(1)} km</div>
-            <div class="col-span-1 text-right font-medium">${km_24h.toFixed(1)} km</div>
-            <div class="col-span-1 text-right font-medium">${km_total.toFixed(1)} km</div>
-        `;
-    } else {
-        const arrivals_1h = calculateStatsFromLog(log, 'arrivals', 1);
-        const arrivals_24h = calculateStatsFromLog(log, 'arrivals', 24);
-        const arrivals_total = asset.arrivals || 0;
-        statsHtml += `
-            <div class="col-span-1">Obsłużono (Przyj.)</div>
-            <div class="col-span-1 text-right font-medium">${fmt(arrivals_1h)}</div>
-            <div class="col-span-1 text-right font-medium">${fmt(arrivals_24h)}</div>
-            <div class="col-span-1 text-right font-medium">${fmt(arrivals_total)}</div>
-        `;
-    }
-    grid.innerHTML = `<div class="grid grid-cols-4 gap-x-4 gap-y-2 w-full">${statsHtml}</div>`;
+    let statsHtml = `<div class="col-span-2">1h: ${fmt(profit_1h)} VC</div><div class="col-span-2">Total: ${fmt(profit_total)} VC</div>`;
+    grid.innerHTML = `<div class="grid grid-cols-4 gap-4 text-sm">${statsHtml}</div>`;
     
-    const earningsData = asset.earningsLog || [];
     const ctx = $('asset-earnings-chart').getContext('2d');
     if (state.assetChart) state.assetChart.destroy();
-    
-    state.assetChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: earningsData.map((_, i) => `T-${earningsData.length - i}`),
-            datasets: [{ label: 'Zysk na Tick', data: earningsData.map(d => d.profit), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.1, pointRadius: 0 }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(107, 114, 128, 0.2)' } }, y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(107, 114, 128, 0.2)' } } } }
-    });
+    state.assetChart = new Chart(ctx, { type: 'line', data: { labels: log.map((_, i) => i), datasets: [{ label: 'Zysk', data: log.map(d => d.profit), borderColor: '#3b82f6' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
     modal.style.display = 'flex';
 }
 
-// ===== 2. FUNKCJE RENDERUJĄCE (WIDOKI) =====
+// ===== 2. FUNKCJE RENDERUJĄCE =====
 
-export function renderEmptyState(container, message) { 
-    container.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 p-8 text-center">${message}</div>`; 
-}
-export function renderSectionTitle(container, title) { 
-    const el = document.createElement('div'); 
-    el.className = 'px-4 py-2 bg-gray-800/50 text-sm font-semibold text-gray-300 sticky top-0 z-10 backdrop-blur-sm'; 
-    el.textContent = title; 
-    container.appendChild(el); 
-}
+export function renderEmptyState(container, message) { container.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 p-8 text-center">${message}</div>`; }
+export function renderSectionTitle(container, title) { const el = document.createElement('div'); el.className = 'px-4 py-2 bg-gray-800/50 text-sm font-semibold text-gray-300 sticky top-0 z-10 backdrop-blur-sm'; el.textContent = title; container.appendChild(el); }
 
-// Lista Pojazdów (Sklep i Flota)
 export function renderVehicleList(container) {
     const searchTerm = $('search').value.toLowerCase();
     let listSource = [];
+    if (state.activeTab === 'store') { let all = []; Object.values(state.vehicles).forEach(m => all.push(...m.values())); listSource = all.filter(v => !state.owned[`${v.type}:${v.id}`]); } 
+    else { listSource = Object.values(state.owned).map(od => { const ld = state.vehicles[od.type]?.get(String(od.id)); const d = { ...od, ...(ld || {}) }; d.status = !ld ? 'offline' : (d.isMoving ? 'in-use' : 'online'); return d; }); }
     
-    if (state.activeTab === 'store') { 
-        let allVehicles = []; 
-        Object.values(state.vehicles).forEach(map => allVehicles.push(...map.values())); 
-        listSource = allVehicles.filter(v => !state.owned[`${v.type}:${v.id}`]); 
-    } else { 
-        listSource = Object.values(state.owned).map(ownedData => { 
-            const liveData = state.vehicles[ownedData.type]?.get(String(ownedData.id)); 
-            const data = { ...ownedData, ...(liveData || {}) }; 
-            if (!liveData) { data.status = 'offline'; } 
-            else if (data.isMoving) { data.status = 'in-use'; } 
-            else { data.status = 'online'; } 
-            return data; 
-        }); 
-    }
-
     const filtered = listSource.filter(v => {
         if (!v || !v.type) return false;
         const key = `${v.type}:${v.id}`;
-        const isOwnedByMe = !!state.owned[key];
+        const isMine = !!state.owned[key];
+        if (state.activeTab === 'store' && state.globalTaken.has(key) && !isMine) return false;
         
-        // Ukryj zajęte w sklepie
-        if (state.activeTab === 'store' && state.globalTaken.has(key) && !isOwnedByMe) { return false; }
-        
-        const typeMatch = state.filters.types.includes(v.type);
-        const countryMatch = !v.country || state.filters.countries.includes(v.country);
         const safeName = (v.customName || v.title || '').toLowerCase();
         const searchMatch = !searchTerm || safeName.includes(searchTerm);
         const rarity = getVehicleRarity(v);
         const rarityMatch = state.filters.rarities.includes(rarity);
-        return typeMatch && countryMatch && searchMatch && rarityMatch;
+        return searchMatch && rarityMatch;
     });
 
-    if (filtered.length === 0) { renderEmptyState(container, "Brak pojazdów spełniających kryteria."); return; }
+    if (filtered.length === 0) { renderEmptyState(container, "Brak pojazdów."); return; }
 
     filtered.forEach(v => {
         const key = `${v.type}:${v.id}`;
@@ -315,257 +204,158 @@ export function renderVehicleList(container) {
         const rarity = getVehicleRarity(v);
         const details = config.vehicleDetails[v.type];
         const el = document.createElement('div');
-        el.className = `bg-gray-800/50 rounded-lg border border-gray-700/50 p-3 flex flex-col gap-3 transition-all duration-200 hover:border-blue-500 hover:bg-gray-800`;
+        el.className = `bg-gray-800/50 rounded-lg border border-gray-700/50 p-3 flex flex-col gap-3 hover:border-blue-500 transition`;
         el.dataset.key = key;
         
-        const earningsPerKm = config.baseRate[v.type] || 0;
-        const isElectric = config.energyConsumption[v.type] > 0;
-        const consumption = isElectric ? config.energyConsumption[v.type] : config.fuelConsumption[v.type];
-        const pricePerUnit = state.economy.energyPrices[v.country || 'Europe']?.[isElectric ? 'Electricity' : 'Diesel'] || (isElectric ? 0.22 : 1.85);
-        const costPerKm = (consumption / 100) * pricePerUnit;
-        
-        let ageInfo = '<span class="px-2 py-0.5 bg-green-600 text-white rounded-full text-xs font-semibold">Nowy</span>';
-        let vehicleTitle = v.title || 'Nieznany Pojazd';
-        if (isOwned) { 
-            const ageDays = (new Date() - new Date(ownedData.purchaseDate)) / (1000 * 60 * 60 * 24); 
-            ageInfo = `Wiek: <strong>${Math.floor(ageDays)} dni</strong> | Przebieg: <strong>${fmt(ownedData.odo_km || 0)} km</strong>`; 
-            vehicleTitle = ownedData.customName || vehicleTitle; 
-        }
-        const rarityColors = { common: 'text-gray-400', rare: 'text-blue-400', epic: 'text-purple-400', legendary: 'text-amber-400' };
+        let vTitle = v.title || 'Pojazd';
+        if (isOwned) vTitle = state.owned[key].customName || vTitle;
+        const rColors = { common: 'text-gray-400', rare: 'text-blue-400', epic: 'text-purple-400', legendary: 'text-amber-400' };
         
         el.innerHTML = `
             <div class="flex gap-3">
-                <div class="w-20 h-20 rounded-md bg-gray-700 flex-shrink-0 flex items-center justify-center text-5xl">${ICONS[v.type] || '❓'}</div>
+                <div class="w-20 h-20 rounded-md bg-gray-700/50 flex-shrink-0 flex items-center justify-center p-2 border border-gray-600">
+                   ${getIconHtml(v.type)}
+                </div>
                 <div class="flex-grow">
-                    <div class="flex justify-between items-start">
-                        <h4 class="font-bold text-white text-base leading-tight flex items-center gap-2">
-                           ${isOwned ? `<span class="w-2.5 h-2.5 rounded-full ${v.status === 'online' ? 'bg-blue-500' : v.status === 'in-use' ? 'bg-green-500' : 'bg-gray-500'}" title="${v.status === 'online' ? 'Online' : v.status === 'in-use' ? 'W ruchu' : 'Offline'}"></span>` : ''}
-                           <span>${vehicleTitle}</span>
-                        </h4>
-                        <span class="font-bold text-lg ${rarityColors[rarity]}">${rarity.charAt(0).toUpperCase() + rarity.slice(1)}</span>
-                    </div>
-                    <p class="text-xs text-gray-400">${v.type.toUpperCase()} • ${v.country || 'Brak danych'}</p>
-                    <p class="text-xs text-gray-300 mt-1">${ageInfo}</p>
+                    <div class="flex justify-between"><h4 class="font-bold text-white leading-tight text-sm">${isOwned ? `<span class="w-2 h-2 rounded-full inline-block mr-1 bg-blue-500"></span>` : ''}${vTitle}</h4><span class="text-xs font-bold ${rColors[rarity]}">${rarity}</span></div>
+                    <p class="text-xs text-gray-400 mt-1">${v.type.toUpperCase()} • ${v.country || '-'}</p>
+                    <div class="mt-2 font-mono text-blue-400 font-bold">${isOwned ? 'Twoja flota' : fmt(price) + ' VC'}</div>
                 </div>
             </div>
-            <div class="grid grid-cols-3 gap-x-2 gap-y-1 text-xs text-center border-t border-gray-700/50 pt-2">
-                <div><div class="text-gray-400">Moc</div><div class="font-semibold text-white">${details.power}</div></div>
-                <div><div class="text-gray-400">V-max</div><div class="font-semibold text-white">${details.maxSpeed}</div></div>
-                <div><div class="text-gray-400">V-śr.</div><div class="font-semibold text-white">${details.avgSpeed}</div></div>
-                <div><div class="text-gray-400">Zysk/km</div><div class="font-semibold text-green-400">${earningsPerKm.toFixed(2)} VC</div></div>
-                <div><div class="text-gray-400">Koszt/km</div><div class="font-semibold text-red-400">${costPerKm.toFixed(2)} VC</div></div>
-                <div><div class="text-gray-400">Netto/km</div><div class="font-semibold text-blue-400">${(earningsPerKm - costPerKm).toFixed(2)} VC</div></div>
-            </div>
             <div class="flex gap-2 mt-2">
-                ${isOwned 
-                    ? `<button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white font-bold py-1.5 px-3 rounded-md text-sm transition" data-info-key="${key}">Szczegóły</button>`
-                    : `<div class="flex-1 text-center font-bold text-2xl text-blue-400 self-center">${fmt(price)} VC</div>`
-                }
-                ${isOwned
-                    ? `<button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-3 rounded-md text-sm transition" data-center="${key}" title="Pokaż na mapie"><i class="ri-focus-3-line"></i></button>`
-                    : `<button class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-1.5 px-3 rounded-md text-sm transition" data-buy="${key}|${price}">Kup</button>`
-                }
+                ${isOwned ? `<button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-3 rounded text-sm" data-info-key="${key}">Info</button>` : ``}
+                ${isOwned ? `<button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 rounded text-sm" data-center="${key}"><i class="ri-focus-3-line"></i></button>` : `<button class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-1 px-3 rounded text-sm" data-buy="${key}|${price}">Kup</button>`}
             </div>`;
         container.appendChild(el);
     });
 }
 
-// Karta Pojazdu (Szczegóły)
 export function renderVehicleCard(key) {
-    const [type, ...idParts] = key.split(':');
-    const id = idParts.join(':');
+    const [type, ...idParts] = key.split(':'); const id = idParts.join(':');
     const isOwned = !!state.owned[key];
     const baseData = isOwned ? state.owned[key] : state.vehicles[type]?.get(id);
-    
     if (!baseData) { $('vehicle-card').classList.add('translate-y-full'); return; }
-    
-    const liveData = state.vehicles[type]?.get(id);
-    const vehicle = { ...baseData, ...(liveData || {}) };
-    const rarity = getVehicleRarity(vehicle);
+    const v = { ...baseData, ...(state.vehicles[type]?.get(id) || {}) };
+    const rarity = getVehicleRarity(v);
     const card = $('vehicle-card');
+    card.className = `absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl bg-gray-800/90 backdrop-blur-md border-t-4 p-4 rounded-t-lg transition-transform z-10 card-rarity-${rarity} shadow-2xl`;
     
-    card.className = `absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl bg-gray-800/80 backdrop-blur-sm border-t-4 p-4 rounded-t-lg transform transition-transform duration-300 ease-in-out z-10 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.3)] card-rarity-${rarity}`;
-    
-    const ownedData = state.owned[key] || {};
-    const price = config.basePrice[type] || 1000;
-    const weatherData = vehicle.weather || { temperature: 15, weathercode: 3 };
-    const weatherIcon = getWeatherIcon(weatherData.weathercode);
-    
-    let status;
-    if (!liveData && isOwned) { status = 'offline'; } else if (vehicle.isMoving) { status = 'in-use'; } else { status = 'online'; }
-    const statusClasses = { online: 'bg-blue-500', 'in-use': 'bg-green-500', offline: 'bg-gray-500' };
-    const statusTexts = { online: 'Online', 'in-use': 'W trasie', offline: 'Offline' };
-    
-    let detailsHtml = `<div class="text-xs text-gray-400">Lokalizacja</div><div class="text-sm font-medium">${isFinite(vehicle.lat) ? vehicle.lat.toFixed(4) + ', ' + vehicle.lon.toFixed(4) : 'N/A'}</div><div class="text-xs text-gray-400">Pogoda</div><div class="text-sm font-medium">${weatherData.temperature}°C <i class="${weatherIcon}"></i></div>`;
-    
+    let details = `<div class="text-xs text-gray-400">Typ</div><div class="text-sm font-medium">${type}</div>`;
+    let actions = '';
     if (isOwned) {
-        const levelIndex = (ownedData.level || 1) - 1;
-        const efficiencyBonus = config.upgrade.efficiencyBonus[levelIndex] || 1;
-        const isElectric = config.energyConsumption[type] > 0;
-        let baseConsumption = isElectric ? config.energyConsumption[type] : config.fuelConsumption[type];
-        const currentConsumption = baseConsumption * efficiencyBonus;
-        let consumptionHtml = `${baseConsumption.toFixed(1)}`;
-        if (ownedData.level > 1) consumptionHtml += ` <i class="ri-arrow-right-line"></i> <span class="text-green-400">${currentConsumption.toFixed(1)}</span>`;
-        
-        detailsHtml += `<div class="text-xs text-gray-400">Poziom</div><div class="text-sm font-medium">${ownedData.level || 1}</div><div class="text-xs text-gray-400">Przebieg</div><div class="text-sm font-medium">${(ownedData.odo_km || 0).toFixed(2)} km</div><div class="text-xs text-gray-400">Zysk Netto</div><div class="text-sm font-medium">${fmt(ownedData.earned_vc || 0)} VC</div><div class="text-xs text-gray-400">Zużycie</div><div class="text-sm font-medium">${(ownedData.wear || 0).toFixed(1)}%</div><div class="text-xs text-gray-400">${isElectric ? "Zużycie energii" : "Spalanie"}</div><div class="text-sm font-medium">${consumptionHtml}</div>`;
+        const owned = state.owned[key];
+        details += `<div class="text-xs text-gray-400">Przebieg</div><div class="text-sm font-medium">${fmt(owned.odo_km)} km</div>`;
+        actions = `<button class="flex-1 bg-gray-600 text-white font-bold py-2 rounded" data-svc="${key}">Serwis</button>
+                   <button class="flex-1 bg-purple-600 text-white font-bold py-2 rounded" id="upgrade-btn">Ulepsz</button>
+                   <button class="flex-1 bg-red-700 text-white font-bold py-2 rounded" id="sell-quick-btn">Sprzedaj</button>`;
     } else {
-        detailsHtml += `<div class="text-xs text-gray-400">Kraj</div><div class="text-sm font-medium">${vehicle.country || 'Brak danych'}</div>`;
+        const price = config.basePrice[type] || 1000;
+        actions = `<button class="flex-1 bg-blue-600 text-white font-bold py-2 rounded" data-buy="${key}|${price}">Kup (${fmt(price)})</button>`;
     }
 
-    let upgradeButtonHtml = '';
-    if(isOwned && (ownedData.level || 1) < 5) {
-        const nextLevelIndex = ownedData.level || 1;
-        const cost = config.upgrade.costs[nextLevelIndex];
-        const kmReq = config.upgrade.kms[nextLevelIndex];
-        const canUpgrade = state.wallet >= cost && (ownedData.odo_km || 0) >= kmReq;
-        upgradeButtonHtml = `<button class="flex-1 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-md text-sm transition" id="upgrade-btn" ${canUpgrade ? '' : 'disabled'}><i class="ri-arrow-up-circle-line"></i> Ulepsz (${fmt(cost)} VC)</button>`;
-    } else if (isOwned) { upgradeButtonHtml = `<button class="flex-1 bg-gray-600 text-white font-bold py-2 px-3 rounded-md text-sm" disabled>Maks. poziom</button>`; }
-    
-    const bonusHtml = getProximityBonus(vehicle.lat, vehicle.lon, state.playerLocation) > 1 ? `<span class="text-green-400 text-sm font-bold ml-2"><i class="ri-signal-wifi-line"></i> Bonus +50%</span>` : '';
-
-    card.innerHTML = `<div class="flex justify-between items-start mb-3"><div><div class="flex items-center gap-2"><h3 class="text-xl font-bold text-white">${ownedData.customName || vehicle.title}</h3>${isOwned ? `<button id="edit-vehicle-name-btn" class="text-gray-400 hover:text-white transition-colors"><i class="ri-pencil-line"></i></button>` : ''}</div><div class="flex items-center gap-2 text-sm text-gray-300"><span class="w-2.5 h-2.5 rounded-full ${statusClasses[status]}"></span><span>${statusTexts[status]}</span>${bonusHtml}</div></div><button class="text-gray-400 hover:text-white transition-colors text-2xl" id="close-card-btn"><i class="ri-close-line"></i></button></div><div class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 mb-4">${detailsHtml}</div><div class="flex flex-wrap gap-2"><button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-md text-sm transition" data-svc="${key}"><i class="ri-tools-line"></i> Serwis</button>${isOwned ? upgradeButtonHtml : `<button class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-md text-sm transition" data-buy="${key}|${price}"><i class="ri-shopping-cart-line"></i> Kup</button>`}${isOwned ? `<button class="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-3 rounded-md text-sm transition" id="sell-quick-btn"><i class="ri-money-dollar-circle-line"></i> Szybka sprzedaż</button>` : ''}${isOwned ? `<button class="flex-1 bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-3 rounded-md text-sm transition" id="sell-market-btn"><i class="ri-store-2-line"></i> Giełda</button>` : ''}</div>`;
+    card.innerHTML = `
+        <div class="flex justify-between mb-3 items-start">
+            <div class="flex gap-4">
+                <div class="w-16 h-16 bg-gray-900 rounded-lg border border-gray-700 p-1 flex items-center justify-center">
+                    ${getIconHtml(type)}
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">${isOwned ? v.customName : v.title}</h3>
+                    <div class="text-sm text-gray-400">${v.country || 'Global'}</div>
+                </div>
+            </div>
+            <button class="text-2xl text-gray-400 hover:text-white" id="close-card-btn"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="grid grid-cols-4 gap-4 mb-4 border-t border-gray-700 pt-3">${details}</div>
+        <div class="flex gap-2">${actions}</div>`;
     card.classList.remove('translate-y-full');
 }
 
-// Infrastruktura (Stacje)
 export function renderInfrastructure(container) {
-    const rarityColors = { common: 'text-gray-400', rare: 'text-blue-400', epic: 'text-purple-400', legendary: 'text-amber-400' };
+    const rColors = { common: 'text-gray-400', rare: 'text-blue-400', epic: 'text-purple-400', legendary: 'text-amber-400' };
     for (const id in config.infrastructure) {
-        const stationConfig = config.infrastructure[id];
-        let category;
-        switch(stationConfig.type) {
-            case 'train': category = 'trainStations'; break; case 'tube': category = 'tubeStations'; break; case 'cable': category = 'cableCar'; break; case 'river-bus': category = 'riverPiers'; break; case 'bus': category = 'busTerminals'; break; default: continue;
-        }
-        const stationData = state.infrastructure[category] ? state.infrastructure[category][id] : undefined;
-        if (!stationData) continue;
-        const wrapper = document.createElement('div'); wrapper.className = "border-b border-gray-800";
-        const el = document.createElement('div'); el.className = `flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-800/50 transition-colors border-l-4 rarity-${stationConfig.rarity}`; el.dataset.stationId = id;
-        let actionsHtml = stationData.owned ? `<button class="ml-auto text-gray-400 hover:text-white transition-colors text-xl" data-info-key="station:${id}" title="Szczegóły"><i class="ri-information-line"></i></button>` : `<div class="text-right"><div class="font-bold text-blue-400">${fmt(stationConfig.price)} VC</div><button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 rounded-md text-sm transition mt-1" data-buy-station="${id}|${stationConfig.price}">Kup</button></div>`;
-        const bonusHtml = getProximityBonus(stationConfig.lat, stationConfig.lon, state.playerLocation) > 1 ? `<span class="text-green-400 text-xs font-bold"><i class="ri-signal-wifi-line"></i> +50%</span>` : '';
-        el.innerHTML = `<div class="text-3xl">${ICONS['station_' + stationConfig.type]}</div><div class="flex-grow"><h4 class="font-semibold text-white">${stationConfig.name}</h4><div class="text-xs text-gray-400 flex items-center gap-2 mt-1"><span class="font-semibold ${rarityColors[stationConfig.rarity]}">${stationConfig.rarity.charAt(0).toUpperCase() + stationConfig.rarity.slice(1)}</span><span>• Zysk: ${fmt(stationData.totalEarnings)} VC</span><span>• Szac: ~${fmt(stationConfig.estimatedIncome)} VC/h</span>${bonusHtml}</div></div>${actionsHtml}`;
-        const detailsContainer = document.createElement('div'); detailsContainer.className = 'station-details-container';
-        if (id === state.selectedStationId && stationData.owned) { detailsContainer.classList.add('visible', 'p-2'); renderStationDetails(id, detailsContainer); }
-        wrapper.appendChild(el); wrapper.appendChild(detailsContainer); container.appendChild(wrapper);
+        const conf = config.infrastructure[id];
+        let cat; switch(conf.type) { case 'train': cat='trainStations'; break; case 'tube': cat='tubeStations'; break; case 'cable': cat='cableCar'; break; case 'river-bus': cat='riverPiers'; break; case 'bus': cat='busTerminals'; break; default: continue; }
+        const data = state.infrastructure[cat]?.[id];
+        if (!data) continue;
+        const el = document.createElement('div'); el.className = `flex items-center gap-3 p-3 border-b border-gray-800 border-l-4 rarity-${conf.rarity}`; el.dataset.stationId = id;
+        el.innerHTML = `<div class="w-12 h-12">${getIconHtml('station_'+conf.type)}</div><div class="flex-grow"><h4 class="font-semibold">${conf.name}</h4><div class="text-xs text-gray-400"><span class="${rColors[conf.rarity]}">${conf.rarity}</span> • Zysk: ${fmt(data.totalEarnings)} VC</div></div>${data.owned ? '<button class="text-xl" data-info-key="station:'+id+'"><i class="ri-information-line"></i></button>' : `<button class="bg-blue-600 text-white px-3 py-1 rounded text-sm" data-buy-station="${id}|${conf.price}">Kup ${fmt(conf.price)}</button>`}`;
+        container.appendChild(el);
+        if (id === state.selectedStationId && data.owned) { const det = document.createElement('div'); det.className='p-2 bg-gray-900/50'; renderStationDetails(id, det); container.appendChild(det); }
     }
 }
 
 export function renderStationDetails(id, container) {
     const stationConfig = config.infrastructure[id];
-    container.innerHTML = `<p class="text-xs text-gray-400 px-2 pb-2">Szczegóły w przygotowaniu dla ${stationConfig.name}...</p>`;
-}
+    const { type } = stationConfig;
+    container.innerHTML = ''; 
 
-// Pozostałe funkcje renderujące
-export function renderLootboxTab(container) {
-    container.innerHTML = `<div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4"></div>`;
-    const content = container.firstChild;
-    for (const boxType in lootboxConfig) {
-        const box = lootboxConfig[boxType];
-        const el = document.createElement('div'); el.className = "bg-gray-800/50 p-4 rounded-lg border border-gray-700/50 flex flex-col text-center";
-        el.innerHTML = `<h3 class="text-2xl font-bold">${box.icon} ${box.name}</h3><p class="text-sm text-gray-400 flex-grow my-2">${box.description || ''}</p><div class="text-lg font-semibold text-blue-400 mb-3">${fmt(box.cost)} VC</div><button class="w-full bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md transition" data-open-box="${boxType}" ${state.wallet < box.cost ? 'disabled' : ''}><i class="ri-inbox-unarchive-line"></i> Otwórz</button>`;
-        content.appendChild(el);
+    if (type === 'train') {
+        const trains = state.stationData[id] || [];
+        const departures = trains.filter(t => t.timeTableRows.some(r => r.stationShortCode === id && r.type === 'DEPARTURE'));
+        const arrivals = trains.filter(t => t.timeTableRows.some(r => r.stationShortCode === id && r.type === 'ARRIVAL'));
+        
+        const createTable = (title, list) => {
+            let html = `<h5 class="font-bold text-xs text-blue-400 mt-2 mb-1">${title}</h5><table class="w-full text-[10px]"><tbody>`;
+            if(list.length === 0) html += `<tr><td class="text-gray-500">Brak danych</td></tr>`;
+            list.slice(0, 5).forEach(t => {
+                const row = t.timeTableRows.find(r => r.stationShortCode === id && r.type === (title==='Odjazdy'?'DEPARTURE':'ARRIVAL'));
+                const time = new Date(row.scheduledTime).toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+                html += `<tr class="border-t border-gray-700"><td class="py-1">${t.trainType} ${t.trainNumber}</td><td class="text-right font-mono">${time}</td></tr>`;
+            });
+            return html + '</tbody></table>';
+        };
+        
+        container.innerHTML = createTable('Odjazdy', departures) + createTable('Przyjazdy', arrivals);
+
+    } else if (type === 'bus' && stationConfig.apiId.startsWith('place-')) { 
+        const data = state.stationData[id]?.data || [];
+        let html = `<table class="w-full text-[10px] mt-2"><thead><tr><th class="text-left">Kierunek</th><th class="text-right">Czas</th></tr></thead><tbody>`;
+        if(data.length === 0) html += `<tr><td colspan="2" class="text-gray-500">Brak odjazdów</td></tr>`;
+        data.slice(0,5).forEach(d => {
+           const time = d.attributes.departure_time ? new Date(d.attributes.departure_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '-';
+           html += `<tr class="border-t border-gray-700"><td class="py-1">Bus</td><td class="text-right font-mono text-green-400">${time}</td></tr>`;
+        });
+        container.innerHTML = html + '</tbody></table>';
+
+    } else { 
+        const data = (state.stationData[id]?.data || []).sort((a, b) => (a.timeToStation || 9999) - (b.timeToStation || 9999));
+        let html = `<table class="w-full text-[10px] mt-2"><thead><tr><th class="text-left">Linia</th><th class="text-left">Kierunek</th><th class="text-right">Min</th></tr></thead><tbody>`;
+        if(data.length === 0) html += `<tr><td colspan="3" class="text-gray-500">Brak danych live</td></tr>`;
+        data.slice(0, 8).forEach(arr => {
+            html += `<tr class="border-t border-gray-700"><td class="py-1 text-blue-300">${arr.lineName}</td><td>${arr.destinationName}</td><td class="text-right font-bold text-white">${Math.floor(arr.timeToStation/60)}</td></tr>`;
+        });
+        container.innerHTML = html + '</tbody></table>';
     }
 }
 
-export function renderMarket(container) {
-    if (state.marketListings.length === 0) { renderEmptyState(container, "Brak ofert na giełdzie."); return; }
-    state.marketListings.forEach((listing, index) => {
-        const v = listing.vehicle; const rarity = getVehicleRarity(v);
-        const el = document.createElement('div'); el.className = `flex items-center gap-3 p-3 border-b border-gray-800 border-l-4 border-transparent rarity-${rarity}`;
-        const timeStr = Math.floor((new Date(listing.expiresAt) - new Date()) / 3600000) + 'h';
-        el.innerHTML = `<div class="text-3xl">${ICONS[v.type] || '❓'}</div><div class="flex-grow"><h4 class="font-semibold text-white">${v.customName || v.title}</h4><div class="text-xs text-gray-400">Lvl ${v.level || 1} | ${(v.odo_km || 0).toFixed(0)} km | Wygasa za: ${timeStr}</div></div><div class="text-right"><div class="font-bold text-blue-400">${fmt(listing.price)} VC</div><button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 rounded-md text-sm transition mt-1" data-buy-market="${index}" ${state.wallet < listing.price ? 'disabled' : ''}>Kup</button></div>`;
-        container.appendChild(el);
-    });
-}
+export function renderLootboxTab(container) { container.innerHTML = '<div class="p-4 grid grid-cols-2 gap-4"></div>'; for(const k in lootboxConfig) { const b=lootboxConfig[k]; container.firstChild.innerHTML += `<div class="bg-gray-800 p-4 rounded text-center"><div class="text-4xl">${b.icon}</div><h3>${b.name}</h3><p class="text-blue-400 font-bold">${fmt(b.cost)} VC</p><button class="bg-green-600 w-full py-2 mt-2 rounded text-white" data-open-box="${k}">Otwórz</button></div>`; } }
+export function renderMarket(container) { if(!state.marketListings.length) return renderEmptyState(container, "Pusto."); state.marketListings.forEach((l, i) => { const el = document.createElement('div'); el.className="p-3 border-b border-gray-800 flex gap-3"; el.innerHTML = `<div class="w-12 h-12">${getIconHtml(l.vehicle.type)}</div><div class="flex-grow"><h4>${l.vehicle.customName||l.vehicle.title}</h4><div class="text-blue-400 font-bold">${fmt(l.price)} VC</div></div><button class="bg-blue-600 text-white px-3 rounded" data-buy-market="${i}">Kup</button>`; container.appendChild(el); }); }
+export function renderRankings(container) { container.innerHTML = '<div class="p-4">Rankingi...</div>'; }
+export function renderCharts(container) { container.innerHTML = '<div class="p-4 text-center text-gray-500">Wykresy</div>'; }
+export function renderAchievements(container) { for(const k in achievementsList) { const a=achievementsList[k]; const u=state.achievements[k]; const el=document.createElement('div'); el.className="p-3 border-b border-gray-800 flex gap-3"; el.innerHTML = `<div class="text-2xl">${u?.unlocked?'🏆':'🔒'}</div><div class="flex-grow"><h4>${a.title}</h4></div>${u?.unlocked && !u.claimed ? `<button class="bg-green-600 text-white px-3 rounded" data-claim="${k}">Odbierz</button>` : ''}`; container.appendChild(el); } }
+export function renderEnergyPrices(container) { container.innerHTML = '<div class="p-4">Ceny paliw...</div>'; }
+export function renderTransactionHistory(container) { (state.profile.transaction_history||[]).forEach(t => { const el=document.createElement('div'); el.className="p-3 border-b border-gray-800 flex justify-between"; el.innerHTML=`<span>${t.description}</span><span class="${t.amount>0?'text-green-400':'text-red-400'}">${fmt(t.amount)}</span>`; container.appendChild(el); }); }
+export function renderGuildTab(container) { container.innerHTML = '<div class="p-4 text-center">System gildii wkrótce...</div>'; }
+export function renderCompanyTab(container) { container.innerHTML = '<div class="p-4 text-center">Edycja firmy...</div>'; }
+export function renderFriendsTab(container) { container.innerHTML = '<div class="p-4 text-center">Znajomi...</div>'; }
 
-export function renderRankings(container) {
-    const renderList = (title, data, key, unit) => {
-        renderSectionTitle(container, title); const list = document.createElement('ul');
-        data.slice(0, 20).forEach((p, i) => { const el = document.createElement('li'); el.className = `flex items-center p-2 border-b border-gray-800 text-sm ${p.isPlayer ? 'bg-blue-900/50' : ''}`; el.innerHTML = `<div class="w-8 text-center font-bold text-gray-400">${i + 1}</div><div class="flex-grow font-medium">${p.name}</div><div class="font-semibold text-blue-400">${fmt(p[key])} ${unit}</div>`; list.appendChild(el); }); container.appendChild(list);
-    };
-    renderList('Wartość Aktywów', state.rankings.assetValue, 'assetValue', 'VC');
-    renderList('Zysk Tygodniowy', state.rankings.weeklyEarnings, 'weeklyEarnings', 'VC');
-}
-
-function calculateFleetStatsByType() { const stats = {}; ['plane', 'train', 'tube', 'bus', 'bike', 'river-bus', 'tram'].forEach(type => { stats[type] = { count: 0, totalEarnings: 0, totalKm: 0, totalValue: 0, estimatedVcPerHour: 0 }; }); for (const key in state.owned) { const vehicle = state.owned[key]; const type = vehicle.type; if (stats[type]) { stats[type].count++; stats[type].totalEarnings += vehicle.earned_vc || 0; stats[type].totalKm += vehicle.odo_km || 0; stats[type].totalValue += config.basePrice[type] || 0; } } for (const type in stats) { if (stats[type].count > 0) { const dailyKm = config.estimatedDailyKm[type] || 0; const baseRate = config.baseRate[type] || 0; stats[type].estimatedVcPerHour = (stats[type].count * dailyKm / 24) * baseRate; } } return stats; }
-
-export function renderCharts(container) {
-    container.innerHTML = `<div class="chart-carousel h-full flex flex-col p-2"><div class="carousel-track-container"><div class="carousel-track"><div class="carousel-slide"><div class="chart-wrapper"><h4 class="font-bold text-center text-lg mb-2">Podsumowanie Floty</h4><div id="fleet-summary-container" class="overflow-y-auto flex-grow pr-2"></div></div></div><div class="carousel-slide"><div class="chart-wrapper"><h4 class="font-bold text-center text-lg mb-2">Przychody (godz.)</h4><div class="flex-grow relative"><canvas id="earningsChart"></canvas></div></div></div><div class="carousel-slide"><div class="chart-wrapper"><h4 class="font-bold text-center text-lg mb-2">Struktura floty</h4><div class="flex-grow relative"><canvas id="compositionChart"></canvas></div></div></div></div></div><div class="flex justify-center gap-4 p-2"><button id="prevChartBtn" class="bg-gray-700 hover:bg-gray-600 rounded-full w-8 h-8"><i class="ri-arrow-left-s-line"></i></button><button id="nextChartBtn" class="bg-gray-700 hover:bg-gray-600 rounded-full w-8 h-8"><i class="ri-arrow-right-s-line"></i></button></div></div>`;
-    const summaryContainer = $('fleet-summary-container'); const fleetStats = calculateFleetStatsByType();
-    for (const type in fleetStats) { const data = fleetStats[type]; if (data.count > 0) { const el = document.createElement('div'); el.className = 'bg-gray-800/50 p-3 rounded-lg border border-gray-700/50 mb-2'; el.innerHTML = `<div class="flex items-center gap-2 font-bold mb-2"><span class="text-xl">${ICONS[type]}</span><span>${type} (${data.count})</span></div><div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs"><span class="text-gray-400">Wartość:</span><span class="text-right font-medium">${fmt(data.totalValue)} VC</span><span class="text-gray-400">Zarobek:</span><span class="text-right font-medium">${fmt(data.totalEarnings)} VC</span></div>`; summaryContainer.appendChild(el); } }
-    const earningsCtx = $('earningsChart').getContext('2d'); new Chart(earningsCtx, { type: 'line', data: { labels: Array(60).fill(''), datasets: [{ label: 'VC', data: state.profile.earnings_history, borderColor: '#3b82f6', tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false } });
-    const compositionCtx = $('compositionChart').getContext('2d'); const fleetComp = Object.values(state.owned).reduce((acc, v) => { acc[v.type] = (acc[v.type] || 0) + 1; return acc; }, {}); new Chart(compositionCtx, { type: 'doughnut', data: { labels: Object.keys(fleetComp), datasets: [{ data: Object.values(fleetComp), backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'] }] }, options: { responsive: true, maintainAspectRatio: false } });
-    let cur = 0; const track = document.querySelector('.carousel-track');
-    $('nextChartBtn').onclick = () => { if(cur < 2) { cur++; track.style.transform = `translateX(-${cur * 100}%)`; } };
-    $('prevChartBtn').onclick = () => { if(cur > 0) { cur--; track.style.transform = `translateX(-${cur * 100}%)`; } };
-}
-
-export function renderAchievements(container) {
-    for (const key in achievementsList) {
-        const ach = achievementsList[key]; const data = state.achievements[key];
-        const isClaimed = data?.claimed; const isUnlocked = data?.unlocked;
-        const el = document.createElement('div'); el.className = `p-3 border-b border-gray-800 flex items-center gap-4 ${!isUnlocked ? 'opacity-50' : ''} ${isClaimed ? 'bg-gray-800/30' : ''}`;
-        const action = (!isUnlocked || isClaimed) ? '' : `<button class="ml-auto bg-green-600 text-white py-1 px-3 rounded-md text-sm" data-claim="${key}">Odbierz</button>`;
-        el.innerHTML = `<div class="text-3xl">${isUnlocked ? '🏆' : '⏳'}</div><div class="flex-grow"><h4 class="font-semibold">${ach.title}</h4><p class="text-xs text-gray-400">${ach.description}</p></div>${action}`;
-        container.appendChild(el);
-    }
-}
-
-export function renderEnergyPrices(container) {
-    container.innerHTML = `<div class="p-4"><table class="w-full text-sm text-left text-gray-400"><thead class="text-xs text-gray-300 uppercase bg-gray-800"><tr><th class="px-4 py-2">Region</th><th class="px-4 py-2">Typ</th><th class="px-4 py-2">Cena</th></tr></thead><tbody id="energy-prices-body"></tbody></table></div>`;
-    const tbody = $('energy-prices-body');
-    for (const c in state.economy.energyPrices) { for (const t in state.economy.energyPrices[c]) { const row = tbody.insertRow(); row.className="border-b border-gray-800"; row.innerHTML=`<td class="px-4 py-2 font-medium text-white">${c}</td><td class="px-4 py-2">${t}</td><td class="px-4 py-2 text-blue-400">${state.economy.energyPrices[c][t].toFixed(2)}</td>`; } }
-}
-
-export function renderTransactionHistory(container) {
-    (state.profile.transaction_history || []).forEach(tx => {
-        const el = document.createElement('div'); el.className = 'p-3 border-b border-gray-800 flex justify-between items-center';
-        el.innerHTML = `<div><p class="font-medium text-white">${tx.description}</p><p class="text-xs text-gray-500">${new Date(tx.timestamp).toLocaleString()}</p></div><div class="text-right"><p class="font-semibold ${tx.amount>=0?'text-green-400':'text-red-400'}">${tx.amount>0?'+':''}${fmt(tx.amount)} VC</p></div>`;
-        container.appendChild(el);
-    });
-}
-
-export function renderGuildTab(container) {
-    const { playerGuildId, guilds } = state.guild;
-    if (!playerGuildId) {
-        container.innerHTML = `<div class="p-4 space-y-6"><div><h3 class="text-lg font-semibold mb-2">Stwórz Gildię</h3><div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700/50 space-y-3"><input type="text" id="guild-name-input" placeholder="Nazwa..." class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-1.5"><button id="create-guild-btn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md">Załóż (${fmt(config.guilds.creationCost)} VC)</button></div></div><div><h3 class="text-lg font-semibold mb-2">Dołącz</h3><div id="guild-list" class="space-y-2"></div></div></div>`;
-        const list = $('guild-list');
-        for (const gid in guilds) { const g = guilds[gid]; const el = document.createElement('div'); el.className = 'flex justify-between bg-gray-800/50 p-3 rounded-lg'; el.innerHTML = `<span>${g.name} (${g.members.length})</span><button class="bg-blue-600 text-white px-3 py-1 rounded-md text-sm" data-join-guild="${gid}">Dołącz</button>`; list.appendChild(el); }
-    } else {
-        const myGuild = guilds[playerGuildId];
-        container.innerHTML = `<div class="p-4 space-y-4"><div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700/50"><div class="flex justify-between"><div><h3 class="text-xl font-bold">${myGuild.name}</h3><p class="text-sm text-gray-400">${myGuild.description}</p></div><button class="bg-red-600 text-white px-3 py-1 rounded-md text-xs" data-leave-guild>Opuść</button></div><div class="mt-4"><h4 class="text-sm font-semibold">Skarbiec</h4><p class="text-lg font-bold text-blue-400">${fmt(myGuild.bank)} VC</p></div></div><div><h3 class="text-lg font-semibold">Czat</h3><div class="bg-gray-800/50 p-2 rounded-lg h-64 flex flex-col"><div id="guild-chat-messages" class="flex-grow overflow-y-auto p-2"></div><div class="flex gap-2 p-2"><input type="text" id="chat-message-input" class="flex-grow bg-gray-800 border border-gray-600 rounded-md px-3 py-1"><button id="send-chat-msg-btn" class="bg-blue-600 text-white px-4 rounded-md">></button></div></div></div></div>`;
-        const chat = $('guild-chat-messages'); (myGuild.chat || []).forEach(m => { const d = document.createElement('div'); d.innerHTML = `<span class="text-xs text-gray-400">[${new Date(m.timestamp).toLocaleTimeString()}]</span> <b class="text-blue-400">${m.sender}:</b> ${m.message}`; chat.appendChild(d); });
-    }
-}
-
-export function renderCompanyTab(container) {
-    const logos = ['🏢', '🏭', '🚀', '🌐', '⚡️', '🚂', '✈️', '🚌', '🚢', '⭐'];
-    const colors = ['blue', 'green', 'red', 'yellow', 'purple'];
-    const colorHex = { blue: '#3b82f6', green: '#22c55e', red: '#ef4444', yellow: '#eab308', purple: '#8b5cf6' };
-    container.innerHTML = `<div class="p-4 space-y-6"><div><h3 class="text-lg font-semibold mb-2">Nazwa</h3><div class="bg-gray-800/50 p-4 rounded-lg space-y-3"><input type="text" id="company-name-input" value="${state.profile.companyName}" class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-1.5"><button id="save-company-btn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md">Zapisz</button></div></div><div><h3 class="text-lg font-semibold mb-2">Logo</h3><div class="bg-gray-800/50 p-4 rounded-lg grid grid-cols-5 gap-3">${logos.map(l => `<button class="text-3xl p-2 bg-gray-700 rounded-md" data-logo="${l}">${l}</button>`).join('')}</div></div><div><h3 class="text-lg font-semibold mb-2">Kolor</h3><div class="bg-gray-800/50 p-4 rounded-lg flex justify-around">${colors.map(c => `<button class="w-10 h-10 rounded-full" style="background:${colorHex[c]}" data-color="${c}"></button>`).join('')}</div></div></div>`;
-}
-
-export function renderFriendsTab(container) {
-    container.innerHTML = `<div class="p-4 space-y-4"><div><h3 class="text-lg font-semibold mb-2">Dodaj</h3><div class="flex gap-2"><input type="text" id="friend-name-input" class="flex-grow bg-gray-800 border border-gray-600 rounded-md px-3 py-1.5"><button id="add-friend-btn" class="bg-green-600 text-white font-bold px-4 rounded-md">Dodaj</button></div></div><div id="friends-list" class="space-y-2"></div></div>`;
-    const list = $('friends-list'); (state.profile.friends || []).forEach((f, i) => { const el = document.createElement('div'); el.className = 'flex justify-between bg-gray-800/50 p-3 rounded-lg'; el.innerHTML = `<span>${f}</span><button class="text-red-500" data-remove-friend="${i}">Usuń</button>`; list.appendChild(el); });
-}
-
-export function toggleContentPanel(forceVisible) {
-    const panel = $('content-panel');
-    const isVisible = typeof forceVisible === 'boolean' ? forceVisible : panel.classList.contains('-translate-x-full');
-    panel.classList.toggle('-translate-x-full', !isVisible);
-    panel.classList.toggle('translate-x-0', isVisible);
+export function toggleContentPanel(show) { 
+    const p = $('content-panel'); 
+    const visible = show ?? p.classList.contains('-translate-x-full');
+    p.classList.toggle('-translate-x-full', !visible); 
+    p.classList.toggle('translate-x-0', visible);
     if (!isVisible) { state.activeTab = null; document.querySelectorAll('.nav-item.bg-gray-800').forEach(el => el.classList.remove('bg-gray-800', 'text-white')); }
 }
 
-export function updateUI(inMin = 0, outMin = 0) {
-    const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
-    setTxt('company-name', state.profile.companyName || 'Moja Firma');
-    setTxt('wallet', fmt(state.wallet));
-    setTxt('level', state.profile.level);
-    const xp = Math.round(state.profile.xp);
-    const xpNext = 100 + (state.profile.level - 1) * 50;
-    setTxt('xp', xp); setTxt('xpNext', xpNext);
-    $('xpProgressBar').style.width = `${(xp / xpNext) * 100}%`;
+export function updateUI(inM, outM) {
+    const set = (id, v) => { const e = $(id); if(e) e.textContent = v; };
+    set('wallet', fmt(state.wallet));
+    set('company-name', state.profile.companyName);
+    set('level', state.profile.level);
+    set('xp', Math.round(state.profile.xp));
+    set('xpNext', 100 + (state.profile.level-1)*50);
+    $('xpProgressBar').style.width = `${(state.profile.xp / (100+(state.profile.level-1)*50))*100}%`;
     setTxt('owned-vehicles-count', Object.keys(state.owned).length);
     const buildingCount = Object.values(state.infrastructure).reduce((sum, category) => sum + Object.values(category).filter(item => item.owned).length, 0);
     setTxt('owned-buildings-count', buildingCount);
@@ -587,6 +377,7 @@ export function updateUI(inMin = 0, outMin = 0) {
     kpiPanel.classList.remove('border-blue-500', 'border-green-500', 'border-red-500', 'border-yellow-500', 'border-purple-500');
     kpiPanel.classList.add(`border-${state.profile.color}-500`);
 }
+const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
 
 const panelTitles = { stations: "Infrastruktura", store: "Sklep", fleet: "Moja Flota", market: "Giełda", lootbox: "Skrzynki", achievements: "Osiągnięcia", stats: "Statystyki", friends: "Znajomi", rankings: "Ranking", energy: "Ceny Energii", guild: "Gildia", transactions: "Historia Transakcji", company: "Personalizacja Firmy" };
 
@@ -635,22 +426,29 @@ export function redrawMap() {
             let entry = state.markers.get(key);
             if (typeMatch && countryMatch && v.lat != null && isFinite(v.lat) && v.lon != null && isFinite(v.lon)) {
                 visibleKeys.add(key);
-                const iconHtml = `<div class="text-2xl">${(isOwned && state.owned[key].skin) || ICONS[v.type] || '❓'}</div>`;
-                if (!entry) {
+                const iconHtml = `<div class="w-full h-full flex items-center justify-center">${getIconHtml(v.type, "w-8 h-8")}</div>`;
+                
+                if(!entry) {
                     const marker = L.marker([v.lat, v.lon], { icon: createIcon(isOwned && v.isMoving) }).addTo(map);
                     marker.getElement().innerHTML = iconHtml;
                     marker.on('click', () => { const vData = state.vehicles[v.type]?.get(v.id); if (!vData) return; state.selectedVehicleKey = key; render(); });
                     entry = { marker, trail: null }; state.markers.set(key, entry);
                 } else {
-                    entry.marker.setLatLng([v.lat, v.lon]); entry.marker.setIcon(createIcon(isOwned && v.isMoving)); entry.marker.getElement().innerHTML = iconHtml;
+                    entry.marker.setLatLng([v.lat, v.lon]);
+                    entry.marker.getElement().innerHTML = iconHtml;
+                    const iconEl = entry.marker.getElement();
+                    if (iconEl) {
+                        if (isOwned && v.isMoving) iconEl.classList.add('is-moving');
+                        else iconEl.classList.remove('is-moving');
+                    }
                 }
                 if (isOwned && v.history && v.history.length > 1) { const latlngs = v.history.map(p => [p.lat, p.lon]); if (entry.trail) { entry.trail.setLatLngs(latlngs); } else { entry.trail = L.polyline(latlngs, { color: 'rgba(59, 130, 246, 0.5)', weight: 3 }).addTo(map); } } else if (entry.trail) { entry.trail.remove(); entry.trail = null; }
             }
         }
     });
     for (const [key, entry] of state.markers.entries()) { if (!visibleKeys.has(key) && !key.startsWith('station:') && !key.startsWith('guildasset:')) { if(entry.marker) entry.marker.remove(); if(entry.trail) entry.trail.remove(); state.markers.delete(key); } }
-    for (const stationCode in config.infrastructure) { const station = config.infrastructure[stationCode]; const key = `station:${stationCode}`; if (station && !state.markers.has(key)) { const marker = L.marker([station.lat, station.lon], { icon: L.divIcon({ className: 'leaflet-marker-icon', html: `<div class="text-4xl">${ICONS['station_' + station.type]}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }) }).addTo(map); marker.bindPopup(`<b>${station.name}</b>`).on('click', () => { document.querySelector('[data-nav-tab="stations"]').click(); }); state.markers.set(key, { marker }); } }
-    for (const assetKey in config.guildAssets) { const asset = config.guildAssets[assetKey]; const key = `guildasset:${assetKey}`; let ownerGuildName = null; for (const guildId in state.guild.guilds) { if (state.guild.guilds[guildId].ownedAssets && state.guild.guilds[guildId].ownedAssets[assetKey]) { ownerGuildName = state.guild.guilds[guildId].name; break; } } let popupContent = `<b>${asset.name}</b><br>Dostępna do zakupu przez gildię.`; if (ownerGuildName) { popupContent = `<b>${asset.name}</b><br>Właściciel: ${ownerGuildName}`; } if (!state.markers.has(key)) { const marker = L.marker([asset.lat, asset.lon], { icon: L.divIcon({ className: 'leaflet-marker-icon', html: `<div class="text-4xl">${ICONS['asset_power-plant']}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }) }).addTo(map); marker.bindPopup(popupContent).on('click', () => { document.querySelector('[data-nav-tab="guild"]').click(); }); state.markers.set(key, { marker }); } else { state.markers.get(key).marker.getPopup().setContent(popupContent); } }
+    for (const stationCode in config.infrastructure) { const station = config.infrastructure[stationCode]; const key = `station:${stationCode}`; if (station && !state.markers.has(key)) { const marker = L.marker([station.lat, station.lon], { icon: L.divIcon({ className: 'leaflet-marker-icon', html: `<div class="w-10 h-10">${getIconHtml('station_' + station.type)}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }) }).addTo(map); marker.bindPopup(`<b>${station.name}</b>`).on('click', () => { document.querySelector('[data-nav-tab="stations"]').click(); }); state.markers.set(key, { marker }); } }
+    for (const assetKey in config.guildAssets) { const asset = config.guildAssets[assetKey]; const key = `guildasset:${assetKey}`; let ownerGuildName = null; for (const guildId in state.guild.guilds) { if (state.guild.guilds[guildId].ownedAssets && state.guild.guilds[guildId].ownedAssets[assetKey]) { ownerGuildName = state.guild.guilds[guildId].name; break; } } let popupContent = `<b>${asset.name}</b><br>Dostępna do zakupu przez gildię.`; if (ownerGuildName) { popupContent = `<b>${asset.name}</b><br>Właściciel: ${ownerGuildName}`; } if (!state.markers.has(key)) { const marker = L.marker([asset.lat, asset.lon], { icon: L.divIcon({ className: 'leaflet-marker-icon', html: `<div class="w-10 h-10">${getIconHtml('asset_power-plant')}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }) }).addTo(map); marker.bindPopup(popupContent).on('click', () => { document.querySelector('[data-nav-tab="guild"]').click(); }); state.markers.set(key, { marker }); } else { state.markers.get(key).marker.getPopup().setContent(popupContent); } }
 }
 
 export function showPlayerLocation() {
@@ -689,7 +487,15 @@ function getCompanyInfoPopupContent() {
 }
 
 export function setupEventListeners() {
-    document.querySelectorAll('[data-nav-tab]').forEach(btn => { btn.addEventListener('click', () => { const tab = btn.dataset.navTab; if (tab === 'profile') return; if (state.activeTab === tab) { toggleContentPanel(false); } else { state.activeTab = tab; document.querySelectorAll('.nav-item').forEach(item => { item.classList.toggle('bg-gray-800', item.dataset.navTab === tab); item.classList.toggle('text-white', item.dataset.navTab === tab); }); render(); toggleContentPanel(true); } }); });
+    document.querySelectorAll('[data-nav-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.navTab;
+            if(tab === 'profile') return;
+            state.activeTab = tab;
+            render();
+            toggleContentPanel(true);
+        });
+    });
     $('close-content-panel').addEventListener('click', () => toggleContentPanel(false));
     $('edit-company-name-btn').addEventListener('click', () => { document.querySelector('[data-nav-tab="company"]').click(); });
     $('resetAll').addEventListener('click', () => { showConfirm('Na pewno zresetować grę?', () => { localStorage.removeItem('gameState_v9.1'); location.reload(); }); });
@@ -699,9 +505,42 @@ export function setupEventListeners() {
     $('filters-container').addEventListener('change', e => { const parent = e.target.closest('div[id]'); if (!parent) return; const parentId = parent.id; if (parentId === 'filterType') state.filters.types = Array.from(parent.querySelectorAll('input:checked')).map(i => i.value); if (parentId === 'filterCountry') state.filters.countries = Array.from(parent.querySelectorAll('input:checked')).map(i => i.value); if (parentId === 'filterRarity') state.filters.rarities = Array.from(parent.querySelectorAll('input:checked')).map(i => i.value); if (parentId === 'filterMapView') state.filters.mapView = parent.querySelector('input:checked').value; render(); });
 
     $('mainList').addEventListener('click', e => {
+      // 1. BEZPIECZNE KUPNO (RPC)
       const buyTarget = e.target.closest('[data-buy]');
-      if (buyTarget) { e.stopPropagation(); (async () => { const [key, priceStr] = buyTarget.dataset.buy.split('|'); const [type, ...idParts] = key.split(':'); const id = idParts.join(':'); const price = parseInt(priceStr); const vehicleData = state.vehicles[type]?.get(id); if (state.wallet >= price && vehicleData) { const { data, error } = await supabase.from('vehicles').insert([{ owner_id: state.guild.playerGuildId || (await supabase.auth.getUser()).data.user.id, vehicle_api_id: id, type: type, custom_name: vehicleData.title, wear: 0, is_moving: false }]).select(); if (error) { showNotification('Błąd bazy danych: ' + error.message, true); return; } state.wallet -= price; logTransaction(-price, `Zakup: ${vehicleData.title}`); state.owned[key] = { ...vehicleData, odo_km: 0, earned_vc: 0, wear: 0, purchaseDate: new Date().toISOString(), customName: null, level: 1, totalEnergyCost: 0, earningsLog: [], serviceHistory: [] }; await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', (await supabase.auth.getUser()).data.user.id); updateUI(); render(); showNotification(`Zakupiono ${vehicleData.title}!`); } else { showNotification('Za mało środków!', true); } })(); return; }
-      const buyStationTarget = e.target.closest('[data-buy-station]');
+      if (buyTarget) { 
+          e.stopPropagation(); 
+          (async () => {
+              const [key, priceStr] = buyTarget.dataset.buy.split('|'); 
+              const [type, ...idParts] = key.split(':'); 
+              const id = idParts.join(':'); 
+              const price = parseInt(priceStr); 
+              const vehicleData = state.vehicles[type]?.get(id); 
+              
+              if (!vehicleData) { showNotification('Błąd danych pojazdu.', true); return; }
+
+              const { data, error } = await supabase.rpc('buy_vehicle_secure', {
+                  p_vehicle_api_id: id,
+                  p_vehicle_type: type,
+                  p_price: price,
+                  p_custom_name: vehicleData.title
+              });
+
+              if (error) { showNotification('Błąd połączenia: ' + error.message, true); return; }
+
+              if (data.success) {
+                  state.wallet = data.new_wallet; 
+                  logTransaction(-price, `Zakup: ${vehicleData.title}`); 
+                  state.owned[key] = { ...vehicleData, odo_km: 0, earned_vc: 0, wear: 0, purchaseDate: new Date().toISOString(), customName: null, level: 1, totalEnergyCost: 0, earningsLog: [], serviceHistory: [] }; 
+                  state.globalTaken.add(key);
+                  updateUI(); render(); showNotification(`Zakupiono ${vehicleData.title}!`);
+              } else {
+                  showNotification(data.message, true);
+                  if (data.message.includes('zajęty')) { state.globalTaken.add(key); render(); }
+              }
+          })(); 
+          return; 
+      }
+
       // 2. KUPNO STACJI (RPC)
       const buyStationTarget = e.target.closest('[data-buy-station]');
       if (buyStationTarget) { 
@@ -712,19 +551,14 @@ export function setupEventListeners() {
               const stationConfig = config.infrastructure[id];
               
               if (state.wallet >= price) { 
-                  // Wywołanie funkcji SQL
                   const { data, error } = await supabase.rpc('buy_station_secure', {
                       p_station_id: id,
                       p_price: price
                   });
-
                   if (error) { showNotification('Błąd: ' + error.message, true); return; }
-
                   if (data.success) {
                       state.wallet = data.new_wallet;
                       logTransaction(-price, `Zakup: ${stationConfig.name}`); 
-                      
-                      // Aktualizacja lokalna
                       let cat; 
                       switch(stationConfig.type) {
                           case 'train': cat='trainStations'; break; 
@@ -734,20 +568,16 @@ export function setupEventListeners() {
                           case 'bus': cat='busTerminals'; break; 
                       }
                       if(state.infrastructure[cat][id]) state.infrastructure[cat][id].owned = true;
-                      
-                      checkAchievements(); 
-                      updateUI(); 
-                      render(); 
-                      showNotification("Zakupiono stację!");
+                      updateUI(); render(); showNotification("Zakupiono stację!");
                   } else {
                       showNotification(data.message, true);
                   }
-              } else { 
-                  showNotification('Za mało środków!', true); 
-              } 
+              } else { showNotification('Za mało środków!', true); } 
           })();
           return; 
       }
+
+      const buyMarketTarget = e.target.closest('[data-buy-market]');
       if (buyMarketTarget) { e.stopPropagation(); const index = parseInt(buyMarketTarget.dataset.buyMarket, 10); const listing = state.marketListings[index]; if (!listing) { showNotification('Ta oferta jest już nieaktualna!', true); state.marketListings.splice(index, 1); render(); return; } if (state.wallet >= listing.price) { state.wallet -= listing.price; logTransaction(-listing.price, `Zakup z giełdy: ${listing.vehicle.title || listing.vehicle.customName}`); const key = `${listing.vehicle.type}:${listing.vehicle.id}`; state.owned[key] = { ...listing.vehicle }; state.marketListings.splice(index, 1); showNotification(`Kupiono ${listing.vehicle.title || listing.vehicle.customName} z giełdy!`); render(); } else { showNotification('Za mało środków!', true); } return; }
       const claimTarget = e.target.closest('[data-claim]'); if (claimTarget) { e.stopPropagation(); const key = claimTarget.dataset.claim; const ach = achievementsList[key]; state.wallet += ach.reward.vc; state.profile.xp += ach.reward.xp; state.achievements[key].claimed = true; render(); return; }
       const openBoxTarget = e.target.closest('[data-open-box]'); if (openBoxTarget) { e.stopPropagation(); openLootbox(openBoxTarget.dataset.openBox); return; }
