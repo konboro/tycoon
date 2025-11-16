@@ -21,23 +21,21 @@ import {
 import { setupEventListeners } from './ui.js';
 import { handleLogin, handleRegister } from './supabase.js';
 
+// --- KLUCZOWA POPRAWKA JEST TUTAJ ---
 const MAP_KEY = 'gVLyar0EiT75LpMPvAGQ';
-const MAP_URL = `https://api.maptiler.com/maps/streets-v4/512/{z}/{x}/{y}.png?key=${MAP_KEY}`;
+// Zmieniamy .png na .jpg
+const MAP_URL = `https://api.maptiler.com/maps/streets-v4/512/{z}/{x}/{y}.jpg?key=${MAP_KEY}`;
 
 L.tileLayer(MAP_URL, { 
     attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a>',
     tileSize: 512, 
     zoomOffset: -1, 
     maxZoom: 22,
-    
-    // --- POPRAWKA ---
-    // Styl "Streets v4" najwyraźniej nie ma kafelków dla zoomu 3.
-    // Podnosimy minimalny zoom, o który prosimy, do 4.
-    minZoom: 4,
-    // -----------------
-
+    minZoom: 0, // Zostawmy 0, teraz powinno działać
     crossOrigin: true
 }).addTo(map);
+// --- KONIEC POPRAWKI ---
+
 
 // Tworzymy warstwę dla budynków
 map.createPane('buildingsPane');
