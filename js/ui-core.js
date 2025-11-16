@@ -1,23 +1,19 @@
+// js/ui-core.js - WERSJA KOMPLETNA
 import { state } from './state.js';
 import { config } from './config.js';
 import { map } from './state.js';
 import { $, fmt, getProximityBonus, createIcon, getIconHtml, ICONS, getWeatherIcon } from './utils.js';
+import { calculateAssetValue } from './logic.js'; // Importujemy logikę obliczeń
 
 // Importujemy "Malarzy"
 import { 
     renderVehicleList, renderInfrastructure, renderLootboxTab, renderMarket, 
     renderRankings, renderCharts, renderAchievements, renderEnergyPrices, 
     renderTransactionHistory, renderGuildTab, renderCompanyTab, renderFriendsTab, 
-    renderStationDetails, renderVehicleCard, renderEmptyState, renderSectionTitle
+    renderStationDetails, renderVehicleCard, renderEmptyState
 } from './renderers.js';
 
-// ===== 1. FUNKCJE HELPERY UI =====
-
-export function calculateAssetValue() {
-    const fleetValue = Object.values(state.owned).reduce((sum, v) => sum + (config.basePrice[v.type] || 0), 0);
-    const infraValue = Object.values(state.infrastructure).reduce((sum, category) => { return sum + Object.keys(category).reduce((catSum, key) => { return catSum + (category[key].owned ? config.infrastructure[key].price : 0); }, 0); }, 0);
-    return state.wallet + fleetValue + infraValue;
-}
+// ===== 1. FUNKCJE POMOCNICZE UI =====
 
 export function toggleContentPanel(forceVisible) {
     const panel = $('content-panel');
@@ -34,8 +30,6 @@ export function toggleContentPanel(forceVisible) {
     }
 }
 
-// ===== 2. GEOLOKALIZACJA I MAPA (BRAKOWAŁO TEGO!) =====
-
 function getCompanyInfoPopupContent() {
     const companyName = state.profile.companyName || 'Moja Firma';
     const vehicleCount = Object.keys(state.owned).length;
@@ -43,7 +37,7 @@ function getCompanyInfoPopupContent() {
     Object.values(state.infrastructure).forEach(category => {
         Object.values(category).forEach(item => { if (item.owned) buildingCount++; });
     });
-    const companyValue = calculateAssetValue();
+    const companyValue = calculateAssetValue(); // Używamy funkcji z logic.js
     return `<div style="font-family: 'Inter', sans-serif;"><h3 style="margin: 0; font-size: 16px; font-weight: bold;">${companyName}</h3><ul style="list-style: none; padding: 0; margin: 8px 0 0 0; font-size: 14px;"><li style="margin-bottom: 4px;"><strong>Pojazdy:</strong> ${vehicleCount}</li><li style="margin-bottom: 4px;"><strong>Budynki:</strong> ${buildingCount}</li><li><strong>Wartość firmy:</strong> ${fmt(companyValue)} VC</li></ul></div>`;
 }
 
@@ -51,7 +45,7 @@ export function showPlayerLocation() {
     if ('geolocation' in navigator) {
         navigator.geolocation.watchPosition(position => {
             const { latitude, longitude } = position.coords;
-            state.playerLocation = { lat: latitude, lon: longitude }; // Zapisz w stanie
+            state.playerLocation = { lat: latitude, lon: longitude }; 
             
             const playerIcon = L.divIcon({
                 className: 'player-location-icon',
@@ -68,7 +62,6 @@ export function showPlayerLocation() {
                 map.setView([latitude, longitude], 13);
             }
 
-            // Kółko zasięgu (100km)
             if (state.proximityCircle) {
                 state.proximityCircle.setLatLng([latitude, longitude]);
             } else {
@@ -80,16 +73,11 @@ export function showPlayerLocation() {
                     weight: 1
                 }).addTo(map);
             }
-
         }, (error) => {
             console.warn("Nie można uzyskać lokalizacji:", error.message);
-        }, {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
-        });
+        }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
     } else {
-        console.warn("Geolokalizacja nie jest wspierana przez tę przeglądarkę.");
+        console.warn("Geolokalizacja nie jest wspierana.");
     }
 }
 
@@ -108,65 +96,44 @@ export function updatePlayerMarkerIcon() {
 export function redrawMap() {
     const visibleKeys = new Set();
     
-    // 1. Rysowanie pojazdów
+    // Rysowanie pojazdów
     Object.values(state.vehicles).forEach(vehicleMap => {
         for (const v of vehicleMap.values()) {
             const key = `${v.type}:${v.id}`;
             const isOwned = !!state.owned[key];
-            
-            // Filtr widoku "Tylko moje"
             if (state.filters.mapView === 'fleet' && !isOwned) continue;
-            
             const typeMatch = state.filters.types.includes(v.type);
             const countryMatch = !v.country || state.filters.countries.includes(v.country);
-            
+            let entry = state.markers.get(key);
             if (typeMatch && countryMatch && v.lat != null && isFinite(v.lat) && v.lon != null && isFinite(v.lon)) {
                 visibleKeys.add(key);
-                let entry = state.markers.get(key);
-                
-                // Używamy getIconHtml dla obrazków
                 const iconHtml = `<div class="w-full h-full flex items-center justify-center transition-transform duration-500">${getIconHtml(v.type, "w-8 h-8")}</div>`;
                 
                 if (!entry) {
                     const marker = L.marker([v.lat, v.lon], { icon: createIcon(isOwned && v.isMoving) }).addTo(map);
                     marker.getElement().innerHTML = iconHtml;
-                    
                     marker.on('click', () => { 
-                        // Pobierz dane pojazdu (live lub owned)
                         const vData = state.vehicles[v.type]?.get(v.id);
                         if (!vData) return;
                         state.selectedVehicleKey = key;
-                        render(); // Odśwież UI, żeby pokazać kartę
+                        render(); 
                     });
-                    
                     entry = { marker, trail: null };
                     state.markers.set(key, entry);
                 } else {
-                    // Płynne przesuwanie (jeśli obiekt już jest)
                     entry.marker.setLatLng([v.lat, v.lon]);
                     entry.marker.getElement().innerHTML = iconHtml;
-                    
-                    // Aktualizacja klasy CSS dla animacji pulsowania
                     const iconEl = entry.marker.getElement();
                     if (iconEl) {
                         if (isOwned && v.isMoving) iconEl.classList.add('is-moving');
                         else iconEl.classList.remove('is-moving');
                     }
                 }
-                
-                // Ślad trasy (Trail)
-                if (isOwned && v.history && v.history.length > 1) {
-                    const latlngs = v.history.map(p => [p.lat, p.lon]);
-                    if (entry.trail) { entry.trail.setLatLngs(latlngs); } 
-                    else { entry.trail = L.polyline(latlngs, { color: 'rgba(59, 130, 246, 0.5)', weight: 3 }).addTo(map); }
-                } else if (entry.trail) { 
-                    entry.trail.remove(); entry.trail = null; 
-                }
+                if (isOwned && v.history && v.history.length > 1) { const latlngs = v.history.map(p => [p.lat, p.lon]); if (entry.trail) { entry.trail.setLatLngs(latlngs); } else { entry.trail = L.polyline(latlngs, { color: 'rgba(59, 130, 246, 0.5)', weight: 3 }).addTo(map); } } else if (entry.trail) { entry.trail.remove(); entry.trail = null; }
             }
         }
     });
 
-    // Czyszczenie starych markerów (pojazdów, które zniknęły)
     for (const [key, entry] of state.markers.entries()) {
         if (!visibleKeys.has(key) && !key.startsWith('station:') && !key.startsWith('guildasset:')) {
             if(entry.marker) entry.marker.remove();
@@ -175,26 +142,21 @@ export function redrawMap() {
         }
     }
     
-    // 2. Rysowanie Stacji (Infrastruktury)
+    // Rysowanie Stacji (na warstwie 'buildingsPane')
     for (const stationCode in config.infrastructure) {
-        // ... (wewnątrz pętli for (const stationCode...)
         const station = config.infrastructure[stationCode];
         const key = `station:${stationCode}`;
         if (station && !state.markers.has(key)) {
             const marker = L.marker([station.lat, station.lon], { 
                 icon: L.divIcon({ 
                     className: 'leaflet-marker-icon', 
-                    // ZMIANA: Zwiększamy rozmiar (w-16 h-16 to 64px)
                     html: `<div class="w-16 h-16 drop-shadow-lg">${getIconHtml('station_' + station.type)}</div>`, 
-                    // ZMIANA: Nowe rozmiary i kotwica
                     iconSize: [64, 64], 
                     iconAnchor: [32, 32] 
                 }),
-                // ZMIANA: Przypisanie do nowej warstwy
-                pane: 'buildingsPane',
-                zIndexOffset: 100 // Dodatkowy "boost"
+                pane: 'buildingsPane', // Używamy warstwy z main.js
+                zIndexOffset: 100
             }).addTo(map);
-            
             marker.bindPopup(`<b>${station.name}</b>`).on('click', () => { 
                 state.activeTab = 'stations';
                 state.selectedStationId = stationCode;
@@ -203,12 +165,12 @@ export function redrawMap() {
             });
             state.markers.set(key, { marker });
         }
-    // 3. Rysowanie Aktywów Gildii (Elektrownie)
+    }
+
+    // Rysowanie Aktywów Gildii
     for (const assetKey in config.guildAssets) {
         const asset = config.guildAssets[assetKey];
         const key = `guildasset:${assetKey}`;
-        
-        // Sprawdź właściciela
         let ownerGuildName = null;
         for (const guildId in state.guild.guilds) {
             if (state.guild.guilds[guildId].ownedAssets && state.guild.guilds[guildId].ownedAssets[assetKey]) {
@@ -216,7 +178,6 @@ export function redrawMap() {
                 break;
             }
         }
-        
         let popupContent = `<b>${asset.name}</b><br>${asset.realProduction}`;
         if (ownerGuildName) popupContent += `<br><span class="text-blue-400">Właściciel: ${ownerGuildName}</span>`;
         else popupContent += `<br><span class="text-green-400">Na sprzedaż</span>`;
@@ -225,10 +186,12 @@ export function redrawMap() {
              const marker = L.marker([asset.lat, asset.lon], {
                  icon: L.divIcon({ 
                      className: 'leaflet-marker-icon', 
-                     html: `<div class="w-12 h-12 drop-shadow-xl">${getIconHtml('asset_power-plant')}</div>`, 
-                     iconSize: [48, 48], 
-                     iconAnchor: [24, 24] 
-                 })
+                     html: `<div class="w-16 h-16 drop-shadow-xl">${getIconHtml('asset_power-plant')}</div>`, 
+                     iconSize: [64, 64], 
+                     iconAnchor: [32, 32] 
+                 }),
+                 pane: 'buildingsPane', // Używamy warstwy z main.js
+                 zIndexOffset: 100
             }).addTo(map);
             marker.bindPopup(popupContent).on('click', () => { 
                 state.activeTab = 'guild';
@@ -242,7 +205,7 @@ export function redrawMap() {
     }
 }
 
-// ===== 3. GŁÓWNA AKTUALIZACJA UI =====
+// ===== 3. GŁÓWNA AKTUALIZACJA UI (KPI) =====
 
 export function updateUI(inM, outM) {
     const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
@@ -256,7 +219,9 @@ export function updateUI(inM, outM) {
     setTxt('owned-vehicles-count', Object.keys(state.owned).length);
     const buildingCount = Object.values(state.infrastructure).reduce((sum, category) => sum + Object.values(category).filter(item => item.owned).length, 0);
     setTxt('owned-buildings-count', buildingCount);
-    const estimatedAssets = Math.max(0, calculateAssetValue() - state.wallet);
+    
+    // Obliczanie wartości musi być w UI-core, bo jest potrzebne w updateUI
+    const estimatedAssets = Math.max(0, calculateAssetValue() - state.wallet); 
     setTxt('estimated-assets', fmt(estimatedAssets));
     
     // Odometer
@@ -281,8 +246,11 @@ export function updateUI(inM, outM) {
     }
 }
 
+// ===== 4. GŁÓWNY RENDERER =====
+
 const panelTitles = { stations: "Infrastruktura", store: "Sklep", fleet: "Moja Flota", market: "Giełda", lootbox: "Skrzynki", achievements: "Osiągnięcia", stats: "Statystyki", friends: "Znajomi", rankings: "Ranking", energy: "Ceny Energii", guild: "Gildia", transactions: "Historia Transakcji", company: "Personalizacja Firmy" };
 
+// GŁÓWNA FUNKCJA RENDERUJĄCA
 export function render() {
     const listContainer = $('mainList');
     if(!listContainer) return;
