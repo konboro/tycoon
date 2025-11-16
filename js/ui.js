@@ -234,53 +234,124 @@ export function setupEventListeners() {
             return; 
         }
         // 3. Gildie
+        // --- GILDIE (NOWE - Z API SUPABASE) ---
+        
+        // 1. Zakładanie Gildii
         if (e.target.id === 'create-guild-btn') {
             const name = $('guild-name-input').value;
             if(name && state.wallet >= config.guilds.creationCost) {
-                state.wallet -= config.guilds.creationCost;
-                const gid = 'g' + Date.now();
-                state.guild.guilds[gid] = { name, leader: state.profile.companyName, bank: 0, members: [state.profile.companyName], ownedAssets: {}, chat: [], description: "Nowa gildia" };
-                state.guild.playerGuildId = gid;
-                render(); showNotification("Gildia założona!");
+                (async () => {
+                    // 1. Pobierz usera
+                    const user = (await supabase.auth.getUser()).data.user;
+                    
+                    // 2. Utwórz gildię w bazie
+                    const { data: guild, error } = await supabase
+                        .from('guilds')
+                        .insert([{ 
+                            name: name, 
+                            leader_id: user.id, 
+                            bank: 0,
+                            description: "Nowa gildia",
+                            owned_assets: {}
+                        }])
+                        .select()
+                        .single();
+
+                    if (error) { showNotification("Błąd: " + error.message, true); return; }
+
+                    // 3. Dodaj siebie jako członka
+                    await supabase.from('guild_members').insert([{ guild_id: guild.id, user_id: user.id }]);
+
+                    // 4. Odejmij kasę
+                    state.wallet -= config.guilds.creationCost;
+                    await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', user.id);
+
+                    // 5. Odśwież lokalnie (żeby nie czekać na reload)
+                    window.location.reload(); // Najprościej przeładować, żeby zassało wszystko
+                })();
             }
         }
+
+        // 2. Dołączanie
         const joinBtn = e.target.closest('[data-join-guild]');
-        if (joinBtn) { const gid = joinBtn.dataset.joinGuild; state.guild.playerGuildId = gid; state.guild.guilds[gid].members.push(state.profile.companyName); render(); showNotification("Dołączono!"); }
+        if (joinBtn) {
+            (async () => {
+                const gid = joinBtn.dataset.joinGuild;
+                const user = (await supabase.auth.getUser()).data.user;
+                const { error } = await supabase.from('guild_members').insert([{ guild_id: gid, user_id: user.id }]);
+                if(error) showNotification("Już należysz do gildii!", true);
+                else window.location.reload();
+            })();
+        }
+
+        // 3. Kupno Elektrowni (RPC)
         const buyAssetBtn = e.target.closest('[data-buy-guild-asset]');
         if (buyAssetBtn) {
-            const key = buyAssetBtn.dataset.buyGuildAsset;
-            const asset = config.guildAssets[key];
-            const myGuild = state.guild.guilds[state.guild.playerGuildId];
-            if (myGuild.bank >= asset.price) {
-                myGuild.bank -= asset.price;
-                if (!myGuild.ownedAssets) myGuild.ownedAssets = {};
-                myGuild.ownedAssets[key] = true;
-                render(); showNotification(`Gildia kupiła ${asset.name}!`);
-            } else { showNotification("Za mało środków w skarbcu!", true); }
+            (async () => {
+                const key = buyAssetBtn.dataset.buyGuildAsset;
+                const asset = config.guildAssets[key];
+                
+                const { data, error } = await supabase.rpc('buy_guild_asset', {
+                    p_guild_id: state.guild.playerGuildId,
+                    p_asset_key: key,
+                    p_price: asset.price
+                });
+
+                if (error) { showNotification(error.message, true); return; }
+                
+                if (data.success) {
+                    // Aktualizuj lokalnie
+                    state.guild.guilds[state.guild.playerGuildId].bank -= asset.price;
+                    state.guild.guilds[state.guild.playerGuildId].ownedAssets[key] = true;
+                    render(); 
+                    showNotification(`Gildia kupiła ${asset.name}!`);
+                } else {
+                    showNotification(data.message, true);
+                }
+            })();
         }
+
+        // 4. Wpłata (Zabezpieczona)
         if (e.target.id === 'deposit-treasury-btn') {
             const inputEl = document.getElementById('treasury-amount');
-            if(inputEl) {
+            if (inputEl) {
                 const amount = parseInt(inputEl.value);
-                if (amount > 0 && state.wallet >= amount) { state.wallet -= amount; state.guild.guilds[state.guild.playerGuildId].bank += amount; render(); showNotification(`Wpłacono ${fmt(amount)} VC.`); }
+                if (amount > 0 && state.wallet >= amount) {
+                    (async () => {
+                        state.wallet -= amount;
+                        state.guild.guilds[state.guild.playerGuildId].bank += amount;
+                        
+                        // Zapisz w bazie
+                        const gid = state.guild.playerGuildId;
+                        await supabase.from('guilds').update({ bank: state.guild.guilds[gid].bank }).eq('id', gid);
+                        await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', (await supabase.auth.getUser()).data.user.id);
+                        
+                        render(); showNotification(`Wpłacono ${fmt(amount)} VC.`);
+                    })();
+                } else showNotification("Brak środków.", true);
             }
         }
+
+        // 5. Wypłata
         if (e.target.id === 'withdraw-treasury-btn') {
             const inputEl = document.getElementById('treasury-amount');
-            if(inputEl) {
+            if (inputEl) {
                 const amount = parseInt(inputEl.value);
                 const myGuild = state.guild.guilds[state.guild.playerGuildId];
-                if (amount > 0 && myGuild.bank >= amount) { myGuild.bank -= amount; state.wallet += amount; render(); showNotification(`Wypłacono ${fmt(amount)} VC.`); }
+                if (amount > 0 && myGuild.bank >= amount) {
+                     (async () => {
+                        state.wallet += amount;
+                        myGuild.bank -= amount;
+                        
+                        const gid = state.guild.playerGuildId;
+                        await supabase.from('guilds').update({ bank: myGuild.bank }).eq('id', gid);
+                        await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', (await supabase.auth.getUser()).data.user.id);
+                        
+                        render(); showNotification(`Wypłacono ${fmt(amount)} VC.`);
+                    })();
+                } else showNotification("Brak środków w skarbcu.", true);
             }
-        }
-        if (e.target.id === 'send-chat-msg-btn') {
-            const input = $('chat-message-input');
-            if(input.value) { state.guild.guilds[state.guild.playerGuildId].chat.push({ sender: state.profile.companyName, message: input.value, timestamp: new Date().toISOString() }); input.value = ''; render(); }
-        }
-        if (e.target.closest('[data-leave-guild]')) {
-            showConfirm("Opuścić gildię?", () => { const gid = state.guild.playerGuildId; state.guild.guilds[gid].members = state.guild.guilds[gid].members.filter(m => m !== state.profile.companyName); state.guild.playerGuildId = null; render(); });
-        }
-        
+        }        
         // ... reszta listenerów ...
         const claimTarget = e.target.closest('[data-claim]'); if (claimTarget) { e.stopPropagation(); const key = claimTarget.dataset.claim; const ach = achievementsList[key]; state.wallet += ach.reward.vc; state.profile.xp += ach.reward.xp; state.achievements[key].claimed = true; render(); return; }
         const openBoxTarget = e.target.closest('[data-open-box]'); if (openBoxTarget) { e.stopPropagation(); openLootbox(openBoxTarget.dataset.openBox); return; }
