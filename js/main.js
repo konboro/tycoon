@@ -30,15 +30,17 @@ L.tileLayer(MAP_URL, {
     zoomOffset: -1, 
     maxZoom: 22,
     
-    // --- TO JEST POPRAWKA ---
-    // Nie pozwala Leafletowi prosić o kafelki na zoomie -1
-    minZoom: 0,
-    // -------------------------
+    // --- POPRAWKA ---
+    // Ustawiamy minimalny zoom, o który Leaflet będzie prosił.
+    // Skoro błędy są na zoom=3, ustawmy minimum na 3.
+    // To naprawi błędy 404 przy oddalaniu.
+    minZoom: 3,
+    // -----------------
 
     crossOrigin: true
 }).addTo(map);
 
-// Tworzymy warstwę dla budynków (z-index wyżej niż pojazdy)
+// Tworzymy warstwę dla budynków
 map.createPane('buildingsPane');
 map.getPane('buildingsPane').style.zIndex = 650;
 
