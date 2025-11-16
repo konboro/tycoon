@@ -62,4 +62,13 @@ async function init() {
   render();
 }
 
+// ... (zaraz pod L.tileLayer(...).addTo(map);) ...
+
+// --- TWORZENIE WARSTW RENDEROWANIA ---
+// Domyślny marker (pojazd) ma z-index 600.
+// Tworzymy nową warstwę dla budynków z wyższym indeksem,
+// żeby zawsze były na wierzchu.
+map.createPane('buildingsPane');
+map.getPane('buildingsPane').style.zIndex = 650;
+
 document.addEventListener('DOMContentLoaded', init);

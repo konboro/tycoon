@@ -177,17 +177,24 @@ export function redrawMap() {
     
     // 2. Rysowanie Stacji (Infrastruktury)
     for (const stationCode in config.infrastructure) {
+        // ... (wewnątrz pętli for (const stationCode...)
         const station = config.infrastructure[stationCode];
         const key = `station:${stationCode}`;
         if (station && !state.markers.has(key)) {
             const marker = L.marker([station.lat, station.lon], { 
                 icon: L.divIcon({ 
                     className: 'leaflet-marker-icon', 
-                    html: `<div class="w-10 h-10 drop-shadow-lg">${getIconHtml('station_' + station.type)}</div>`, 
-                    iconSize: [40, 40], 
-                    iconAnchor: [20, 20] 
-                }) 
+                    // ZMIANA: Zwiększamy rozmiar (w-16 h-16 to 64px)
+                    html: `<div class="w-16 h-16 drop-shadow-lg">${getIconHtml('station_' + station.type)}</div>`, 
+                    // ZMIANA: Nowe rozmiary i kotwica
+                    iconSize: [64, 64], 
+                    iconAnchor: [32, 32] 
+                }),
+                // ZMIANA: Przypisanie do nowej warstwy
+                pane: 'buildingsPane',
+                zIndexOffset: 100 // Dodatkowy "boost"
             }).addTo(map);
+            
             marker.bindPopup(`<b>${station.name}</b>`).on('click', () => { 
                 state.activeTab = 'stations';
                 state.selectedStationId = stationCode;
@@ -196,8 +203,6 @@ export function redrawMap() {
             });
             state.markers.set(key, { marker });
         }
-    }
-
     // 3. Rysowanie Aktywów Gildii (Elektrownie)
     for (const assetKey in config.guildAssets) {
         const asset = config.guildAssets[assetKey];
