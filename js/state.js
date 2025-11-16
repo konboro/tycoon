@@ -45,4 +45,6 @@ export const achievementsList = {
 };
 export function logTransaction(amount, description) { if (!state.profile.transaction_history) state.profile.transaction_history = []; state.profile.transaction_history.unshift({ amount, description, timestamp: new Date().toISOString(), balance: state.wallet }); if (state.profile.transaction_history.length > 200) state.profile.transaction_history.pop(); }
 export function checkLevelUp() { function xpNeededForLevel(level) { return 100 + (level - 1) * 50; } while (state.profile.xp >= xpNeededForLevel(state.profile.level)) { state.profile.xp -= xpNeededForLevel(state.profile.level); state.profile.level++; } }
-export const map = L.map('map', { zoomControl: true }).setView([52.23, 21.01], 6);
+// Zabezpieczenie: Twórz mapę tylko, jeśli biblioteka Leaflet (L) istnieje
+// Dzięki temu admin.html (który nie ma mapy) nie wywali błędu
+export const map = (typeof L !== 'undefined') ? L.map('map', { zoomControl: true }).setView([52.23, 21.01], 6) : null;
