@@ -31,10 +31,9 @@ L.tileLayer(MAP_URL, {
     maxZoom: 22,
     
     // --- POPRAWKA ---
-    // Ustawiamy minimalny zoom, o który Leaflet będzie prosił.
-    // Skoro błędy są na zoom=3, ustawmy minimum na 3.
-    // To naprawi błędy 404 przy oddalaniu.
-    minZoom: 3,
+    // Styl "Streets v4" najwyraźniej nie ma kafelków dla zoomu 3.
+    // Podnosimy minimalny zoom, o który prosimy, do 4.
+    minZoom: 4,
     // -----------------
 
     crossOrigin: true
