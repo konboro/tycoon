@@ -22,16 +22,18 @@ import { setupEventListeners } from './ui.js';
 import { handleLogin, handleRegister } from './supabase.js';
 
 // --- POPRAWKA JEST TUTAJ ---
-// Zmieniamy styl na "streets-v2-dark", który ma kafelki .png
+// Usunąłem błędny fragment "/512" z adresu URL.
 const MAP_KEY = 'gVLyar0EiT75LpMPvAGQ';
-const MAP_URL = `https://api.maptiler.com/maps/streets-v2-dark/512/{z}/{x}/{y}.png?key=${MAP_KEY}`;
+const MAP_URL = `https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=${MAP_KEY}`;
 
 L.tileLayer(MAP_URL, { 
     attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a>',
+    // Te opcje są poprawne i muszą zostać, aby mapa działała z kafelkami 512px
     tileSize: 512, 
     zoomOffset: -1, 
+    
     maxZoom: 22,
-    minZoom: 0, // Ten styl obsługuje niskie zoomy
+    minZoom: 0, 
     crossOrigin: true
 }).addTo(map);
 // --- KONIEC POPRAWKI ---
