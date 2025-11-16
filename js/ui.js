@@ -5,7 +5,7 @@ import { $, fmt, showNotification, showConfirm, getProximityBonus, getWeatherIco
 import { fetchGlobalTakenVehicles } from './api.js';
 import { map } from './state.js';
 
-// ===== 1. FUNKCJE POMOCNICZE (AKCJE GRACZA) =====
+// ===== 1. FUNKCJE POMOCNICZE (AKCJE) =====
 
 function openLootbox(boxType) {
     const box = lootboxConfig[boxType];
@@ -374,12 +374,25 @@ export function renderStationDetails(id, container) {
             });
             return html + '</tbody></table>';
         };
+        
         container.innerHTML = createTable('Odjazdy', departures) + createTable('Przyjazdy', arrivals);
-    } else {
-        const data = (state.stationData[id]?.data || []).slice(0, 8);
-        let html = `<table class="w-full text-[10px] mt-2"><thead><tr><th class="text-left px-2">Linia</th><th class="text-left">Kierunek</th><th class="text-right px-2">Czas</th></tr></thead><tbody>`;
-        data.forEach(d => {
-            html += `<tr class="border-t border-gray-700"><td class="px-2 py-1 text-blue-300">${d.lineName || 'Bus'}</td><td>${d.destinationName || '-'}</td><td class="px-2 py-1 text-right font-bold">${d.timeToStation ? Math.floor(d.timeToStation/60)+'m' : '-'}</td></tr>`;
+
+    } else if (type === 'bus' && stationConfig.apiId.startsWith('place-')) { 
+        const data = state.stationData[id]?.data || [];
+        let html = `<table class="w-full text-[10px] mt-2"><thead><tr><th class="text-left px-2">Kierunek</th><th class="text-right px-2">Czas</th></tr></thead><tbody>`;
+        if(data.length === 0) html += `<tr><td colspan="2" class="text-gray-500 px-2">Brak odjazdów</td></tr>`;
+        data.slice(0,5).forEach(d => {
+           const time = d.attributes.departure_time ? new Date(d.attributes.departure_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '-';
+           html += `<tr class="border-t border-gray-700"><td class="px-2 py-1 text-blue-300">Bus</td><td class="px-2 py-1 text-right font-mono text-green-400">${time}</td></tr>`;
+        });
+        container.innerHTML = html + '</tbody></table>';
+
+    } else { 
+        const data = (state.stationData[id]?.data || []).sort((a, b) => (a.timeToStation || 9999) - (b.timeToStation || 9999));
+        let html = `<table class="w-full text-[10px] mt-2"><thead><tr><th class="text-left px-2">Linia</th><th class="text-left">Kierunek</th><th class="text-right px-2">Min</th></tr></thead><tbody>`;
+        if(data.length === 0) html += `<tr><td colspan="3" class="text-gray-500 px-2">Brak danych live</td></tr>`;
+        data.slice(0, 8).forEach(arr => {
+            html += `<tr class="border-t border-gray-700"><td class="px-2 py-1 text-blue-300">${arr.lineName}</td><td>${arr.destinationName}</td><td class="px-2 py-1 text-right font-bold text-white">${Math.floor(arr.timeToStation/60)}</td></tr>`;
         });
         container.innerHTML = html + '</tbody></table>';
     }
@@ -396,7 +409,151 @@ export function renderGuildTab(container) { const { playerGuildId, guilds } = st
 export function renderCompanyTab(container) { const logos = ['🏢', '🏭', '🚀', '🌐', '⚡️', '🚂', '✈️', '🚌', '🚢', '⭐']; const colors = ['blue', 'green', 'red', 'yellow', 'purple']; const colorHex = { blue: '#3b82f6', green: '#22c55e', red: '#ef4444', yellow: '#eab308', purple: '#8b5cf6' }; container.innerHTML = `<div class="p-4 space-y-6"><div><h3 class="text-lg font-semibold mb-2">Nazwa</h3><div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700 space-y-3"><input type="text" id="company-name-input" value="${state.profile.companyName}" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white"><button id="save-company-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-md">Zapisz</button></div></div><div><h3 class="text-lg font-semibold mb-2">Logo</h3><div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700 grid grid-cols-5 gap-3">${logos.map(l => `<button class="text-3xl p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition" data-logo="${l}">${l}</button>`).join('')}</div></div><div><h3 class="text-lg font-semibold mb-2">Kolor</h3><div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex justify-around">${colors.map(c => `<button class="w-10 h-10 rounded-full border-2 border-transparent hover:border-white transition" style="background:${colorHex[c]}" data-color="${c}"></button>`).join('')}</div></div></div>`; }
 export function renderFriendsTab(container) { container.innerHTML = `<div class="p-4 space-y-4"><div><h3 class="text-lg font-semibold mb-2">Dodaj</h3><div class="flex gap-2"><input type="text" id="friend-name-input" class="flex-grow bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white"><button id="add-friend-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold px-4 rounded-md">Dodaj</button></div></div><div id="friends-list" class="space-y-2"></div></div>`; const list = $('friends-list'); (state.profile.friends || []).forEach((f, i) => { const el = document.createElement('div'); el.className = 'flex justify-between items-center bg-gray-800/50 p-3 rounded-lg border border-gray-700'; el.innerHTML = `<span class="font-medium text-white">${f}</span><button class="text-red-500 hover:text-red-400" data-remove-friend="${i}"><i class="ri-delete-bin-line"></i></button>`; list.appendChild(el); }); }
 
-// ===== 3. EVENT LISTENERS =====
+export function toggleContentPanel(show) { 
+    const p = $('content-panel'); 
+    const visible = show ?? p.classList.contains('-translate-x-full');
+    p.classList.toggle('-translate-x-full', !visible); 
+    p.classList.toggle('translate-x-0', visible);
+    if (!isVisible) { state.activeTab = null; document.querySelectorAll('.nav-item.bg-gray-800').forEach(el => el.classList.remove('bg-gray-800', 'text-white')); }
+}
+
+export function updateUI(inM, outM) {
+    const set = (id, v) => { const e = $(id); if(e) e.textContent = v; };
+    set('wallet', fmt(state.wallet));
+    set('company-name', state.profile.companyName);
+    set('level', state.profile.level);
+    set('xp', Math.round(state.profile.xp));
+    set('xpNext', 100 + (state.profile.level-1)*50);
+    $('xpProgressBar').style.width = `${(state.profile.xp / (100+(state.profile.level-1)*50))*100}%`;
+    setTxt('owned-vehicles-count', Object.keys(state.owned).length);
+    const buildingCount = Object.values(state.infrastructure).reduce((sum, category) => sum + Object.values(category).filter(item => item.owned).length, 0);
+    setTxt('owned-buildings-count', buildingCount);
+    const estimatedAssets = Math.max(0, calculateAssetValue() - state.wallet);
+    setTxt('estimated-assets', fmt(estimatedAssets));
+    
+    const earningsHistory = state.profile.earnings_history || [];
+    const hourlyEstimate = earningsHistory.reduce((a, b) => a + b, 0) * (60 / Math.max(1, earningsHistory.length));
+    const odometer = $('hourly-earnings-odometer');
+    const formattedEarnings = Math.round(hourlyEstimate).toLocaleString('pl-PL').padStart(8, '0');
+    odometer.innerHTML = '';
+    for (const digit of formattedEarnings) { if (digit === ' ' || digit === '.' || digit === ',') {} else { const digitEl = document.createElement('span'); digitEl.className = 'odometer-digit'; digitEl.textContent = digit; odometer.appendChild(digitEl); } }
+    const labelEl = document.createElement('span'); labelEl.className = 'odometer-label'; labelEl.textContent = 'VC/h'; odometer.appendChild(labelEl);
+
+    const hasUnclaimed = Object.values(state.achievements).some(a => a.unlocked && !a.claimed);
+    $('ach-notification-dot').style.display = hasUnclaimed ? 'block' : 'none';
+    setTxt('company-logo', state.profile.logo || '🏢');
+    const kpiPanel = $('kpi-panel');
+    kpiPanel.classList.remove('border-blue-500', 'border-green-500', 'border-red-500', 'border-yellow-500', 'border-purple-500');
+    kpiPanel.classList.add(`border-${state.profile.color}-500`);
+}
+const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+
+const panelTitles = { stations: "Infrastruktura", store: "Sklep", fleet: "Moja Flota", market: "Giełda", lootbox: "Skrzynki", achievements: "Osiągnięcia", stats: "Statystyki", friends: "Znajomi", rankings: "Ranking", energy: "Ceny Energii", guild: "Gildia", transactions: "Historia Transakcji", company: "Personalizacja Firmy" };
+
+export function render() {
+    const listContainer = $('mainList');
+    listContainer.innerHTML = '';
+    $('panel-title').textContent = panelTitles[state.activeTab] || "";
+    const controls = $('panel-controls');
+    const filtersContainer = $('filters-container');
+    const showControls = ['store', 'fleet', 'stations', 'market'].includes(state.activeTab);
+    controls.style.display = showControls ? 'block' : 'none';
+    if (showControls) {
+        filtersContainer.innerHTML = '';
+        let filterHtml = `<div id="filterRarity"><h4 class="font-semibold text-sm mb-2">Rzadkość</h4><div class="space-y-1 text-sm"><label class="flex items-center"><input type="checkbox" value="common" ${state.filters.rarities.includes('common') ? 'checked' : ''} class="mr-2 rounded bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-600"> Common</label><label class="flex items-center"><input type="checkbox" value="rare" ${state.filters.rarities.includes('rare') ? 'checked' : ''} class="mr-2 rounded bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-600"> Rare</label><label class="flex items-center"><input type="checkbox" value="epic" ${state.filters.rarities.includes('epic') ? 'checked' : ''} class="mr-2 rounded bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-600"> Epic</label><label class="flex items-center"><input type="checkbox" value="legendary" ${state.filters.rarities.includes('legendary') ? 'checked' : ''} class="mr-2 rounded bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-600"> Legendary</label></div></div><div id="filterMapView"><h4 class="font-semibold text-sm mb-2">Widok mapy</h4><div class="space-y-1 text-sm"><label class="flex items-center"><input type="radio" name="mapView" value="all" ${state.filters.mapView === 'all' ? 'checked' : ''} class="mr-2 bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-600"> Wszystkie</label><label class="flex items-center"><input type="radio" name="mapView" value="fleet" ${state.filters.mapView === 'fleet' ? 'checked' : ''} class="mr-2 bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-600"> Moja flota</label></div></div>`;
+        if (state.activeTab !== 'stations') { filterHtml += `<div id="filterType"><h4 class="font-semibold text-sm mb-2">Typ</h4><div class="space-y-1 text-sm"><label class="flex items-center"><input type="checkbox" value="plane" ${state.filters.types.includes('plane') ? 'checked' : ''} class="mr-2 rounded"> Samoloty</label><label class="flex items-center"><input type="checkbox" value="train" ${state.filters.types.includes('train') ? 'checked' : ''} class="mr-2 rounded"> Pociągi</label><label class="flex items-center"><input type="checkbox" value="tube" ${state.filters.types.includes('tube') ? 'checked' : ''} class="mr-2 rounded"> Metro</label><label class="flex items-center"><input type="checkbox" value="tram" ${state.filters.types.includes('tram') ? 'checked' : ''} class="mr-2 rounded"> Tramwaje</label><label class="flex items-center"><input type="checkbox" value="bus" ${state.filters.types.includes('bus') ? 'checked' : ''} class="mr-2 rounded"> Autobusy</label><label class="flex items-center"><input type="checkbox" value="bike" ${state.filters.types.includes('bike') ? 'checked' : ''} class="mr-2 rounded"> Sharing</label></div></div><div id="filterCountry"><h4 class="font-semibold text-sm mb-2">Kraj</h4><div class="space-y-1 text-sm"><label class="flex items-center"><input type="checkbox" value="USA" ${state.filters.countries.includes('USA') ? 'checked' : ''} class="mr-2 rounded"> USA</label><label class="flex items-center"><input type="checkbox" value="Poland" ${state.filters.countries.includes('Poland') ? 'checked' : ''} class="mr-2 rounded"> Polska</label><label class="flex items-center"><input type="checkbox" value="Finland" ${state.filters.countries.includes('Finland') ? 'checked' : ''} class="mr-2 rounded"> Finlandia</label><label class="flex items-center"><input type="checkbox" value="UK" ${state.filters.countries.includes('UK') ? 'checked' : ''} class="mr-2 rounded"> UK</label></div></div>`; }
+        filtersContainer.innerHTML = filterHtml;
+    }
+    switch (state.activeTab) { 
+        case 'stats': renderCharts(listContainer); break; 
+        case 'achievements': renderAchievements(listContainer); break; 
+        case 'lootbox': renderLootboxTab(listContainer); break; 
+        case 'stations': renderInfrastructure(listContainer); break; 
+        case 'energy': renderEnergyPrices(listContainer); break; 
+        case 'market': renderMarket(listContainer); break; 
+        case 'rankings': renderRankings(listContainer); break; 
+        case 'guild': renderGuildTab(listContainer); break; 
+        case 'friends': renderFriendsTab(listContainer); break; 
+        case 'transactions': renderTransactionHistory(listContainer); break; 
+        case 'company': renderCompanyTab(listContainer); break; 
+        case 'store': case 'fleet': renderVehicleList(listContainer); break; 
+        default: break; 
+    }
+    if (state.selectedVehicleKey) { renderVehicleCard(state.selectedVehicleKey); } else { $('vehicle-card').classList.add('translate-y-full'); }
+    redrawMap();
+}
+
+export function redrawMap() {
+    const visibleKeys = new Set();
+    Object.values(state.vehicles).forEach(vehicleMap => {
+        for (const v of vehicleMap.values()) {
+            const key = `${v.type}:${v.id}`;
+            const isOwned = !!state.owned[key];
+            if (state.filters.mapView === 'fleet' && !isOwned) { continue; }
+            const typeMatch = state.filters.types.includes(v.type);
+            const countryMatch = v.country && state.filters.countries.includes(v.country);
+            let entry = state.markers.get(key);
+            if (typeMatch && countryMatch && v.lat != null && isFinite(v.lat) && v.lon != null && isFinite(v.lon)) {
+                visibleKeys.add(key);
+                const iconHtml = `<div class="w-full h-full flex items-center justify-center">${getIconHtml(v.type, "w-8 h-8")}</div>`;
+                
+                if(!entry) {
+                    const marker = L.marker([v.lat, v.lon], { icon: createIcon(isOwned && v.isMoving) }).addTo(map);
+                    marker.getElement().innerHTML = iconHtml;
+                    marker.on('click', () => { const vData = state.vehicles[v.type]?.get(v.id); if (!vData) return; state.selectedVehicleKey = key; render(); });
+                    entry = { marker, trail: null }; state.markers.set(key, entry);
+                } else {
+                    entry.marker.setLatLng([v.lat, v.lon]);
+                    entry.marker.getElement().innerHTML = iconHtml;
+                    const iconEl = entry.marker.getElement();
+                    if (iconEl) {
+                        if (isOwned && v.isMoving) iconEl.classList.add('is-moving');
+                        else iconEl.classList.remove('is-moving');
+                    }
+                }
+                if (isOwned && v.history && v.history.length > 1) { const latlngs = v.history.map(p => [p.lat, p.lon]); if (entry.trail) { entry.trail.setLatLngs(latlngs); } else { entry.trail = L.polyline(latlngs, { color: 'rgba(59, 130, 246, 0.5)', weight: 3 }).addTo(map); } } else if (entry.trail) { entry.trail.remove(); entry.trail = null; }
+            }
+        }
+    });
+    for (const [key, entry] of state.markers.entries()) { if (!visibleKeys.has(key) && !key.startsWith('station:') && !key.startsWith('guildasset:')) { if(entry.marker) entry.marker.remove(); if(entry.trail) entry.trail.remove(); state.markers.delete(key); } }
+    for (const stationCode in config.infrastructure) { const station = config.infrastructure[stationCode]; const key = `station:${stationCode}`; if (station && !state.markers.has(key)) { const marker = L.marker([station.lat, station.lon], { icon: L.divIcon({ className: 'leaflet-marker-icon', html: `<div class="w-10 h-10">${getIconHtml('station_' + station.type)}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }) }).addTo(map); marker.bindPopup(`<b>${station.name}</b>`).on('click', () => { document.querySelector('[data-nav-tab="stations"]').click(); }); state.markers.set(key, { marker }); } }
+    for (const assetKey in config.guildAssets) { const asset = config.guildAssets[assetKey]; const key = `guildasset:${assetKey}`; let ownerGuildName = null; for (const guildId in state.guild.guilds) { if (state.guild.guilds[guildId].ownedAssets && state.guild.guilds[guildId].ownedAssets[assetKey]) { ownerGuildName = state.guild.guilds[guildId].name; break; } } let popupContent = `<b>${asset.name}</b><br>Dostępna do zakupu przez gildię.`; if (ownerGuildName) { popupContent = `<b>${asset.name}</b><br>Właściciel: ${ownerGuildName}`; } if (!state.markers.has(key)) { const marker = L.marker([asset.lat, asset.lon], { icon: L.divIcon({ className: 'leaflet-marker-icon', html: `<div class="w-10 h-10">${getIconHtml('asset_power-plant')}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }) }).addTo(map); marker.bindPopup(popupContent).on('click', () => { document.querySelector('[data-nav-tab="guild"]').click(); }); state.markers.set(key, { marker }); } else { state.markers.get(key).marker.getPopup().setContent(popupContent); } }
+}
+
+export function showPlayerLocation() {
+    if ('geolocation' in navigator) {
+        navigator.geolocation.watchPosition(position => {
+            const { latitude, longitude } = position.coords;
+            state.playerLocation = { lat: latitude, lon: longitude }; 
+            const playerIcon = L.divIcon({ className: 'player-location-icon', html: `<div class="text-3xl">${state.profile.logo}</div>`, iconSize: [32, 32], iconAnchor: [16, 32] });
+            if (state.playerMarker) { state.playerMarker.setLatLng([latitude, longitude]); } 
+            else { state.playerMarker = L.marker([latitude, longitude], { icon: playerIcon }).addTo(map); state.playerMarker.bindPopup(getCompanyInfoPopupContent); map.setView([latitude, longitude], 13); }
+            if (state.proximityCircle) { state.proximityCircle.setLatLng([latitude, longitude]); } 
+            else { state.proximityCircle = L.circle([latitude, longitude], { radius: 100000, color: 'green', fillColor: '#22c55e', fillOpacity: 0.15, weight: 1 }).addTo(map); }
+        }, (error) => { console.warn("Nie można uzyskać lokalizacji:", error.message); }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+    } else { console.warn("Geolokalizacja nie jest wspierana przez tę przeglądarkę."); }
+}
+
+export function updatePlayerMarkerIcon() {
+    if (state.playerMarker) { const playerIcon = L.divIcon({ className: 'player-location-icon', html: `<div class="text-3xl">${state.profile.logo}</div>`, iconSize: [32, 32], iconAnchor: [16, 32] }); state.playerMarker.setIcon(playerIcon); }
+}
+
+export function calculateAssetValue() {
+    const fleetValue = Object.values(state.owned).reduce((sum, v) => sum + (config.basePrice[v.type] || 0), 0);
+    const infraValue = Object.values(state.infrastructure).reduce((sum, category) => { return sum + Object.keys(category).reduce((catSum, key) => { return catSum + (category[key].owned ? config.infrastructure[key].price : 0); }, 0); }, 0);
+    return state.wallet + fleetValue + infraValue;
+}
+export function generateAIPlayers() { if (state.rankings.assetValue.length > 0) return; const names = ["Global Trans", "Szybki Max", "Cargo Corp", "JetSetters", "Rail Baron", "Metro Movers", "Bus Empire", "Oceanic Trade", "Urban Wheeler"]; for (let i = 0; i < 25; i++) { const name = names[i % names.length] + ` ${i+1}`; const assetValue = Math.floor(Math.random() * 200000000) + 50000; const weeklyEarnings = Math.floor(Math.random() * 5000000) + 10000; const aiPlayer = { name, assetValue, weeklyEarnings, isAI: true }; state.rankings.assetValue.push(aiPlayer); state.rankings.weeklyEarnings.push(aiPlayer); } }
+export function logDailyEarnings() { const today = new Date().toISOString().slice(0, 10); if (today === state.lastDayCheck) return; const yesterday = state.lastDayCheck; const totalEarnedYesterday = state.profile.total_earned; const lastEntry = state.profile.dailyEarningsHistory[state.profile.dailyEarningsHistory.length - 1]; const earningsForDay = lastEntry ? totalEarnedYesterday - lastEntry.totalAtEnd : totalEarnedYesterday; state.profile.dailyEarningsHistory.push({ date: yesterday, earnings: earningsForDay, totalAtEnd: totalEarnedYesterday }); if (state.profile.dailyEarningsHistory.length > 7) { state.profile.dailyEarningsHistory.shift(); } state.lastDayCheck = today; }
+export function updateRankings() { state.rankings.assetValue.forEach(p => { if (p.isAI) p.assetValue *= (1 + (Math.random() - 0.45) * 0.05); }); state.rankings.weeklyEarnings.forEach(p => { if (p.isAI) p.weeklyEarnings *= (1 + (Math.random() - 0.45) * 0.1); }); const playerEntry = { name: state.profile.companyName || "Moja Firma", assetValue: calculateAssetValue(), weeklyEarnings: state.profile.dailyEarningsHistory.reduce((sum, day) => sum + day.earnings, 0), isPlayer: true }; const updateList = (list, key) => { let playerFound = false; const newList = list.map(p => { if (p.isPlayer) { playerFound = true; return playerEntry; } return p; }); if (!playerFound) newList.push(playerEntry); return newList.sort((a, b) => b[key] - a[key]); }; state.rankings.assetValue = updateList(state.rankings.assetValue, 'assetValue'); state.rankings.weeklyEarnings = updateList(state.rankings.weeklyEarnings, 'weeklyEarnings'); }
+
+function getCompanyInfoPopupContent() {
+    const companyName = state.profile.companyName || 'Moja Firma';
+    const vehicleCount = Object.keys(state.owned).length;
+    let buildingCount = 0; Object.values(state.infrastructure).forEach(category => { Object.values(category).forEach(item => { if (item.owned) buildingCount++; }); });
+    const companyValue = calculateAssetValue();
+    return `<div style="font-family: 'Inter', sans-serif;"><h3 style="margin: 0; font-size: 16px; font-weight: bold;">${companyName}</h3><ul style="list-style: none; padding: 0; margin: 8px 0 0 0; font-size: 14px;"><li style="margin-bottom: 4px;"><strong>Pojazdy:</strong> ${vehicleCount}</li><li style="margin-bottom: 4px;"><strong>Budynki:</strong> ${buildingCount}</li><li><strong>Wartość firmy:</strong> ${fmt(companyValue)} VC</li></ul></div>`;
+}
 
 export function setupEventListeners() {
     document.querySelectorAll('[data-nav-tab]').forEach(btn => {
@@ -499,28 +656,12 @@ export function setupEventListeners() {
       const stationItem = e.target.closest('[data-station-id]'); if (stationItem && !e.target.closest('button')) { const stationId = stationItem.dataset.stationId; state.selectedStationId = state.selectedStationId === stationId ? null : stationId; render(); }
       const addFriendTarget = e.target.closest('#add-friend-btn'); if (addFriendTarget) { const input = $('friend-name-input'); const friendName = input.value.trim(); if (friendName && !state.profile.friends.includes(friendName)) { state.profile.friends.push(friendName); render(); input.value = ''; } return; }
       const removeFriendTarget = e.target.closest('[data-remove-friend]'); if (removeFriendTarget) { const index = parseInt(removeFriendTarget.dataset.removeFriend, 10); state.profile.friends.splice(index, 1); render(); return; }
-      
-      // GILDIE
-      const createTarget = e.target.closest('#create-guild-btn'); 
-      if (createTarget) { 
-          const nameInput = $('guild-name-input'); 
-          const name = nameInput.value.trim(); 
-          if (name && state.wallet >= config.guilds.creationCost) { 
-              // Lokalna symulacja, w przyszłości insert do bazy
-              state.wallet -= config.guilds.creationCost; 
-              logTransaction(-config.guilds.creationCost, `Założenie gildii: ${name}`); 
-              const newGuildId = `g${Date.now()}`; 
-              state.guild.guilds[newGuildId] = { name: name, leader: state.profile.companyName, description: "Witaj w naszej gildii!", level: 1, xp: 0, bank: 0, members: [state.profile.companyName], ownedAssets: {}, chat: [] }; 
-              state.guild.playerGuildId = newGuildId; 
-              showNotification(`Stworzono gildię: ${name}`); 
-              render(); 
-          } else { showNotification('Błąd tworzenia gildii.', true); } 
-          return; 
-      }
+      const createTarget = e.target.closest('#create-guild-btn'); if (createTarget) { const nameInput = $('guild-name-input'); const name = nameInput.value.trim(); if (name && state.wallet >= config.guilds.creationCost) { state.wallet -= config.guilds.creationCost; logTransaction(-config.guilds.creationCost, `Założenie gildii: ${name}`); const newGuildId = `g${Date.now()}`; state.guild.guilds[newGuildId] = { name: name, leader: state.profile.companyName, description: "Witaj w naszej gildii!", level: 1, xp: 0, bank: 0, members: [state.profile.companyName], ownedAssets: {}, chat: [] }; state.guild.playerGuildId = newGuildId; showNotification(`Stworzono gildię: ${name}`); render(); } else { showNotification('Błąd tworzenia gildii.', true); } return; }
       const joinTarget = e.target.closest('[data-join-guild]'); if (joinTarget) { state.guild.playerGuildId = joinTarget.dataset.joinGuild; state.guild.guilds[state.guild.playerGuildId].members.push(state.profile.companyName); showNotification(`Dołączono do gildii.`); render(); return; }
       const leaveTarget = e.target.closest('[data-leave-guild]'); if (leaveTarget) { showConfirm('Czy na pewno chcesz opuścić gildię?', () => { const guildId = state.guild.playerGuildId; const guild = state.guild.guilds[guildId]; guild.members = guild.members.filter(m => m !== state.profile.companyName); if (guild.members.length === 0) { delete state.guild.guilds[guildId]; } else if (guild.leader === state.profile.companyName) { guild.leader = guild.members[0]; } state.guild.playerGuildId = null; showNotification(`Opuszczono gildię.`); render(); }); return; }
       const buyAssetTarget = e.target.closest('[data-buy-guild-asset]'); if (buyAssetTarget) { const assetKey = buyAssetTarget.dataset.buyGuildAsset; const assetConfig = config.guildAssets[assetKey]; const myGuild = state.guild.guilds[state.guild.playerGuildId]; if (myGuild.bank >= assetConfig.price) { myGuild.bank -= assetConfig.price; if (!myGuild.ownedAssets) myGuild.ownedAssets = {}; myGuild.ownedAssets[assetKey] = true; showNotification(`Gildia zakupiła: ${assetConfig.name}`); render(); } return; }
-      const depositTarget = e.target.closest('#deposit-treasury-btn'); if(depositTarget) { const amount = parseInt(prompt("Kwota wpłaty:", 10000)); if (amount > 0 && state.wallet >= amount) { state.wallet -= amount; state.guild.guilds[state.guild.playerGuildId].bank += amount; showNotification(`Wpłacono ${fmt(amount)} VC.`); render(); } return; }
+      const depositTarget = e.target.closest('#deposit-treasury-btn'); if(depositTarget) { const amount = parseInt($('treasury-amount-input').value); if (amount > 0 && state.wallet >= amount) { state.wallet -= amount; state.guild.guilds[state.guild.playerGuildId].bank += amount; showNotification(`Wpłacono ${fmt(amount)} VC.`); render(); } return; }
+      const withdrawTarget = e.target.closest('#withdraw-treasury-btn'); if(withdrawTarget) { const amount = parseInt($('treasury-amount-input').value); const myGuild = state.guild.guilds[state.guild.playerGuildId]; if (amount > 0 && myGuild.bank >= amount) { myGuild.bank -= amount; state.wallet += amount; showNotification(`Wypłacono ${fmt(amount)} VC.`); render(); } return; }
       const sendChatTarget = e.target.closest('#send-chat-msg-btn'); if(sendChatTarget) { const input = $('chat-message-input'); const message = input.value.trim(); if (message) { const myGuild = state.guild.guilds[state.guild.playerGuildId]; if(!myGuild.chat) myGuild.chat = []; myGuild.chat.push({ sender: state.profile.companyName, message, timestamp: new Date().toISOString() }); input.value = ''; render(); } return; }
       const editDescTarget = e.target.closest('[data-edit-guild-desc]'); if(editDescTarget) { const myGuild = state.guild.guilds[state.guild.playerGuildId]; const newDesc = prompt("Nowy opis:", myGuild.description); if (newDesc) { myGuild.description = newDesc.trim(); render(); } return; }
       const saveCompanyTarget = e.target.closest('#save-company-btn'); if(saveCompanyTarget) { const newName = $('company-name-input').value.trim(); if(newName) { state.profile.companyName = newName; updateUI(); showNotification("Zapisano."); } }
