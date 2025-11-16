@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state, achievementsList } from './state.js';
 import { config, lootboxConfig } from './config.js';
 import { $, fmt, getIconHtml, getVehicleRarity, getWeatherIcon, ICONS, createIcon, getProximityBonus } from './utils.js';
 import { map } from './state.js';
