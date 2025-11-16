@@ -1,8 +1,10 @@
 import { state, map } from './state.js';
 import { $ } from './utils.js';
 import { fetchPlanes, fetchBUS, fetchTUBE, fetchFI, fetchEnergyPrices, fetchGlobalTakenVehicles, updateVehiclesWithWeather } from './api.js';
-import { tickEconomy, tickAllInfrastructure } from './logic.js';
-import { setupEventListeners, render, updateUI, showPlayerLocation, generateAIPlayers, logDailyEarnings, updateRankings, redrawMap } from './ui.js';
+import { tickEconomy, tickAllInfrastructure, tickGuilds } from './logic.js';
+// ZMIANA: Importujemy z dwóch plików
+import { render, updateUI, showPlayerLocation, generateAIPlayers, logDailyEarnings, updateRankings, redrawMap } from './ui-core.js';
+import { setupEventListeners } from './ui.js';
 import { handleLogin, handleRegister } from './supabase.js';
 
 // KONFIGURACJA KAFELKÓW (MapTiler Satellite)
