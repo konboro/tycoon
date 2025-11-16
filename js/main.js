@@ -2,26 +2,46 @@ import { state, map } from './state.js';
 import { $ } from './utils.js';
 import { fetchPlanes, fetchBUS, fetchTUBE, fetchFI, fetchEnergyPrices, fetchGlobalTakenVehicles, updateVehiclesWithWeather } from './api.js';
 
-// IMPORT Z LOGIC.JS (TERAZ POPRAWNY)
-import { tickEconomy, tickAllInfrastructure, tickGuilds, generateAIPlayers, logDailyEarnings, updateRankings } from './logic.js';
+import { 
+    tickEconomy, 
+    tickAllInfrastructure, 
+    tickGuilds, 
+    generateAIPlayers, 
+    logDailyEarnings, 
+    updateRankings 
+} from './logic.js';
 
-import { render, updateUI, showPlayerLocation, redrawMap } from './ui-core.js';
+import { 
+    render, 
+    updateUI, 
+    showPlayerLocation, 
+    redrawMap 
+} from './ui-core.js';
+
 import { setupEventListeners } from './ui.js';
 import { handleLogin, handleRegister } from './supabase.js';
 
-// KONFIGURACJA MAPY (MapTiler)
+// --- ZMIANA JEST TUTAJ ---
+// Używamy Twojego klucza i stylu "streets-v4", ale w formacie .png
 const MAP_KEY = 'gVLyar0EiT75LpMPvAGQ';
-const MAP_URL = `https://api.maptiler.com/maps/satellite/{z}/{x}/{y}.jpg?key=${MAP_KEY}`;
+const MAP_URL = `https://api.maptiler.com/maps/streets-v4/512/{z}/{x}/{y}.png?key=${MAP_KEY}`;
 
 L.tileLayer(MAP_URL, { 
     attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a>',
     tileSize: 512, 
     zoomOffset: -1, 
-    maxZoom: 20,
+    maxZoom: 22, // Styl uliczny ma bardzo duży zoom
     crossOrigin: true
 }).addTo(map);
+// --- KONIEC ZMIANY ---
 
-map.on('zoomend', () => { redrawMap(); });
+// Tworzymy warstwę dla budynków (z-index wyżej niż pojazdy)
+map.createPane('buildingsPane');
+map.getPane('buildingsPane').style.zIndex = 650;
+
+map.on('zoomend', () => {
+    redrawMap();
+});
 
 async function init() {
   console.log("Gra startuje...");
@@ -31,9 +51,7 @@ async function init() {
   if(loginBtn) loginBtn.addEventListener('click', handleLogin);
   if(regBtn) regBtn.addEventListener('click', handleRegister);
 
-  // TERAZ TA FUNKCJA JEST W LOGIC.JS
-  generateAIPlayers();
-  
+  generateAIPlayers(); 
   setupEventListeners();
   showPlayerLocation();
   
@@ -48,7 +66,7 @@ async function init() {
       updateVehiclesWithWeather(state.vehicles.plane);
       fetchGlobalTakenVehicles();
       render();
-  }, 60000);
+  }, 60000); 
 
   setInterval(tickEconomy, 60000);
   setInterval(tickGuilds, 60000);
@@ -61,14 +79,5 @@ async function init() {
   updateRankings();
   render();
 }
-
-// ... (zaraz pod L.tileLayer(...).addTo(map);) ...
-
-// --- TWORZENIE WARSTW RENDEROWANIA ---
-// Domyślny marker (pojazd) ma z-index 600.
-// Tworzymy nową warstwę dla budynków z wyższym indeksem,
-// żeby zawsze były na wierzchu.
-map.createPane('buildingsPane');
-map.getPane('buildingsPane').style.zIndex = 650;
 
 document.addEventListener('DOMContentLoaded', init);
