@@ -1,12 +1,12 @@
+// js/supabase.js - WERSJA Z OBSŁUGĄ STACJI
 import { state, logTransaction } from './state.js';
 import { updateUI, render } from './ui.js';
-// POPRAWKA: Importujemy mapę ze state.js, a nie main.js
-import { map } from './state.js'; 
+import { map } from './state.js'; // Import mapy ze state.js
 import { $, fmt, showNotification } from './utils.js';
 import { config } from './config.js';
 import { fetchGlobalTakenVehicles } from './api.js';
 
-// Konfiguracja Supabase
+// Konfiguracja Supabase (Twoje klucze)
 const SUPABASE_URL = 'https://xvbeklwkznsgckoozfgp.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2YmVrbHdrem5zZ2Nrb296ZmdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyMDkzMTcsImV4cCI6MjA3ODc4NTMxN30.aVZ5zDxoCgG906jIHBMxDepdOYh8eO1o_tsGlkamOR4';
 
@@ -62,8 +62,9 @@ export async function handleRegister() {
 }
 
 export async function loadProfileFromSupabase(userId) {
-    console.log("Pobieranie profilu i floty z serwera...");
+    console.log("Pobieranie profilu, floty i stacji z serwera...");
     
+    // 1. Pobierz profil
     const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -80,11 +81,13 @@ export async function loadProfileFromSupabase(userId) {
             map.setView([profile.lat, profile.lon], 13);
         }
 
+        // 2. Pobierz pojazdy
         const { data: myVehicles } = await supabase
             .from('vehicles')
             .select('*')
             .eq('owner_id', userId);
         
+        // Obliczanie zarobków offline (pojazdy)
         let offlineEarningsTotal = 0;
         let offlineKmTotal = 0;
         const lastSeenDate = profile.last_seen ? new Date(profile.last_seen) : new Date();
@@ -96,7 +99,7 @@ export async function loadProfileFromSupabase(userId) {
                 const key = `${row.type}:${row.vehicle_api_id}`;
                 let baseData = state.vehicles[row.type]?.get(row.vehicle_api_id) || {};
                 
-                // Kalkulacja offline
+                // Symulacja offline
                 const typeConfig = config.estimatedDailyKm[row.type] || 0; 
                 const rateConfig = config.baseRate[row.type] || 0; 
                 let vehicleOfflineEarnings = 0;
@@ -128,6 +131,33 @@ export async function loadProfileFromSupabase(userId) {
             });
         }
 
+        // 3. Pobierz infrastrukturę (Stacje)
+        const { data: myStations } = await supabase
+            .from('user_infrastructure')
+            .select('station_id')
+            .eq('owner_id', userId);
+
+        if (myStations) {
+            // Resetujemy stan stacji lokalnie
+            for (const cat in state.infrastructure) {
+                for (const sId in state.infrastructure[cat]) {
+                    state.infrastructure[cat][sId].owned = false;
+                }
+            }
+            
+            // Oznaczamy te z bazy jako posiadane
+            myStations.forEach(row => {
+                const sId = row.station_id;
+                if(state.infrastructure.trainStations[sId]) state.infrastructure.trainStations[sId].owned = true;
+                else if(state.infrastructure.tubeStations[sId]) state.infrastructure.tubeStations[sId].owned = true;
+                else if(state.infrastructure.busTerminals[sId]) state.infrastructure.busTerminals[sId].owned = true;
+                else if(state.infrastructure.riverPiers[sId]) state.infrastructure.riverPiers[sId].owned = true;
+                else if(state.infrastructure.cableCar[sId]) state.infrastructure.cableCar[sId].owned = true;
+            });
+            console.log(`Załadowano ${myStations.length} stacji.`);
+        }
+
+        // 4. Podsumowanie offline
         if (offlineEarningsTotal > 0) {
             const earnedInt = Math.floor(offlineEarningsTotal);
             state.wallet += earnedInt;
@@ -162,6 +192,7 @@ export function startServerSync() {
         const user = (await supabase.auth.getUser()).data.user;
         if (!user) return;
 
+        // Zapisz profil
         await supabase.from('profiles').update({
             wallet: state.wallet,
             xp: state.profile.xp,
@@ -171,6 +202,7 @@ export function startServerSync() {
             last_seen: new Date().toISOString()
         }).eq('id', user.id);
 
+        // Zapisz pojazdy (tylko te aktywne)
         for (const key in state.owned) {
             const v = state.owned[key];
             if (v.earned_vc > 0 || v.odo_km > 0) {

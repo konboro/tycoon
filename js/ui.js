@@ -702,8 +702,52 @@ export function setupEventListeners() {
       const buyTarget = e.target.closest('[data-buy]');
       if (buyTarget) { e.stopPropagation(); (async () => { const [key, priceStr] = buyTarget.dataset.buy.split('|'); const [type, ...idParts] = key.split(':'); const id = idParts.join(':'); const price = parseInt(priceStr); const vehicleData = state.vehicles[type]?.get(id); if (state.wallet >= price && vehicleData) { const { data, error } = await supabase.from('vehicles').insert([{ owner_id: state.guild.playerGuildId || (await supabase.auth.getUser()).data.user.id, vehicle_api_id: id, type: type, custom_name: vehicleData.title, wear: 0, is_moving: false }]).select(); if (error) { showNotification('Błąd bazy danych: ' + error.message, true); return; } state.wallet -= price; logTransaction(-price, `Zakup: ${vehicleData.title}`); state.owned[key] = { ...vehicleData, odo_km: 0, earned_vc: 0, wear: 0, purchaseDate: new Date().toISOString(), customName: null, level: 1, totalEnergyCost: 0, earningsLog: [], serviceHistory: [] }; await supabase.from('profiles').update({ wallet: state.wallet }).eq('id', (await supabase.auth.getUser()).data.user.id); updateUI(); render(); showNotification(`Zakupiono ${vehicleData.title}!`); } else { showNotification('Za mało środków!', true); } })(); return; }
       const buyStationTarget = e.target.closest('[data-buy-station]');
-      if (buyStationTarget) { e.stopPropagation(); const [id, priceStr] = buyStationTarget.dataset.buyStation.split('|'); const price = parseInt(priceStr); const stationType = config.infrastructure[id].type; if (state.wallet >= price) { state.wallet -= price; logTransaction(-price, `Zakup: ${config.infrastructure[id].name}`); if(stationType === 'train') state.infrastructure.trainStations[id].owned = true; else if (stationType === 'tube') state.infrastructure.tubeStations[id].owned = true; else if (stationType === 'bus') state.infrastructure.busTerminals[id].owned = true; else if (stationType === 'river-bus') state.infrastructure.riverPiers[id].owned = true; else if (stationType === 'cable') state.infrastructure.cableCar[id].owned = true; updateUI(); render(); } else { showNotification('Za mało środków!', true); } return; }
-      const buyMarketTarget = e.target.closest('[data-buy-market]');
+      // 2. KUPNO STACJI (RPC)
+      const buyStationTarget = e.target.closest('[data-buy-station]');
+      if (buyStationTarget) { 
+          e.stopPropagation(); 
+          (async () => {
+              const [id, priceStr] = buyStationTarget.dataset.buyStation.split('|'); 
+              const price = parseInt(priceStr); 
+              const stationConfig = config.infrastructure[id];
+              
+              if (state.wallet >= price) { 
+                  // Wywołanie funkcji SQL
+                  const { data, error } = await supabase.rpc('buy_station_secure', {
+                      p_station_id: id,
+                      p_price: price
+                  });
+
+                  if (error) { showNotification('Błąd: ' + error.message, true); return; }
+
+                  if (data.success) {
+                      state.wallet = data.new_wallet;
+                      logTransaction(-price, `Zakup: ${stationConfig.name}`); 
+                      
+                      // Aktualizacja lokalna
+                      let cat; 
+                      switch(stationConfig.type) {
+                          case 'train': cat='trainStations'; break; 
+                          case 'tube': cat='tubeStations'; break; 
+                          case 'cable': cat='cableCar'; break; 
+                          case 'river-bus': cat='riverPiers'; break; 
+                          case 'bus': cat='busTerminals'; break; 
+                      }
+                      if(state.infrastructure[cat][id]) state.infrastructure[cat][id].owned = true;
+                      
+                      checkAchievements(); 
+                      updateUI(); 
+                      render(); 
+                      showNotification("Zakupiono stację!");
+                  } else {
+                      showNotification(data.message, true);
+                  }
+              } else { 
+                  showNotification('Za mało środków!', true); 
+              } 
+          })();
+          return; 
+      }
       if (buyMarketTarget) { e.stopPropagation(); const index = parseInt(buyMarketTarget.dataset.buyMarket, 10); const listing = state.marketListings[index]; if (!listing) { showNotification('Ta oferta jest już nieaktualna!', true); state.marketListings.splice(index, 1); render(); return; } if (state.wallet >= listing.price) { state.wallet -= listing.price; logTransaction(-listing.price, `Zakup z giełdy: ${listing.vehicle.title || listing.vehicle.customName}`); const key = `${listing.vehicle.type}:${listing.vehicle.id}`; state.owned[key] = { ...listing.vehicle }; state.marketListings.splice(index, 1); showNotification(`Kupiono ${listing.vehicle.title || listing.vehicle.customName} z giełdy!`); render(); } else { showNotification('Za mało środków!', true); } return; }
       const claimTarget = e.target.closest('[data-claim]'); if (claimTarget) { e.stopPropagation(); const key = claimTarget.dataset.claim; const ach = achievementsList[key]; state.wallet += ach.reward.vc; state.profile.xp += ach.reward.xp; state.achievements[key].claimed = true; render(); return; }
       const openBoxTarget = e.target.closest('[data-open-box]'); if (openBoxTarget) { e.stopPropagation(); openLootbox(openBoxTarget.dataset.openBox); return; }
