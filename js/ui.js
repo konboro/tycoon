@@ -1,9 +1,10 @@
+// js/ui.js - WERSJA Z PEŁNYMI DETALAMI (FIX)
 import { state, achievementsList, logTransaction } from './state.js';
 import { config, lootboxConfig } from './config.js';
 import { supabase } from './supabase.js';
 import { $, fmt, showNotification, showConfirm, getProximityBonus, getWeatherIcon, ICONS, createIcon, getVehicleRarity, getIconHtml } from './utils.js';
 import { fetchGlobalTakenVehicles } from './api.js';
-import { map } from './state.js'; // Import mapy ze state.js
+import { map } from './state.js';
 
 // ===== 1. FUNKCJE POMOCNICZE (AKCJE) =====
 
@@ -175,11 +176,22 @@ export function openAssetDetailsModal(key) {
 export function renderEmptyState(container, message) { container.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 p-8 text-center">${message}</div>`; }
 export function renderSectionTitle(container, title) { const el = document.createElement('div'); el.className = 'px-4 py-2 bg-gray-800/50 text-sm font-semibold text-gray-300 sticky top-0 z-10 backdrop-blur-sm'; el.textContent = title; container.appendChild(el); }
 
+// --- TO JEST POPRAWIONA FUNKCJA Z DETALAMI ---
 export function renderVehicleList(container) {
     const searchTerm = $('search').value.toLowerCase();
     let listSource = [];
-    if (state.activeTab === 'store') { let all = []; Object.values(state.vehicles).forEach(m => all.push(...m.values())); listSource = all.filter(v => !state.owned[`${v.type}:${v.id}`]); } 
-    else { listSource = Object.values(state.owned).map(od => { const ld = state.vehicles[od.type]?.get(String(od.id)); const d = { ...od, ...(ld || {}) }; d.status = !ld ? 'offline' : (d.isMoving ? 'in-use' : 'online'); return d; }); }
+    if (state.activeTab === 'store') { 
+        let all = []; 
+        Object.values(state.vehicles).forEach(m => all.push(...m.values())); 
+        listSource = all.filter(v => !state.owned[`${v.type}:${v.id}`]); 
+    } else { 
+        listSource = Object.values(state.owned).map(od => { 
+            const ld = state.vehicles[od.type]?.get(String(od.id)); 
+            const d = { ...od, ...(ld || {}) }; 
+            d.status = !ld ? 'offline' : (d.isMoving ? 'in-use' : 'online'); 
+            return d; 
+        }); 
+    }
     
     const filtered = listSource.filter(v => {
         if (!v || !v.type) return false;
@@ -207,24 +219,71 @@ export function renderVehicleList(container) {
         el.className = `bg-gray-800/50 rounded-lg border border-gray-700/50 p-3 flex flex-col gap-3 hover:border-blue-500 transition`;
         el.dataset.key = key;
         
+        // Kalkulacje ekonomiczne
+        const earningsPerKm = config.baseRate[v.type] || 0;
+        const isElectric = config.energyConsumption[v.type] > 0;
+        const consumption = isElectric ? config.energyConsumption[v.type] : config.fuelConsumption[v.type];
+        const energyType = isElectric ? 'Electricity' : 'Diesel';
+        const pricePerUnit = state.economy.energyPrices[v.country || 'Europe']?.[energyType] || (isElectric ? 0.22 : 1.85);
+        const costPerKm = (consumption / 100) * pricePerUnit;
+        const netEarnings = earningsPerKm - costPerKm;
+
+        let ageInfo = '<span class="px-2 py-0.5 bg-green-600 text-white rounded-full text-xs font-semibold">Nowy</span>';
         let vTitle = v.title || 'Pojazd';
-        if (isOwned) vTitle = state.owned[key].customName || vTitle;
+        if (isOwned) { 
+            const ageDays = (new Date() - new Date(ownedData.purchaseDate)) / (1000 * 60 * 60 * 24); 
+            ageInfo = `Wiek: <strong>${Math.floor(ageDays)} dni</strong>`; 
+            vTitle = ownedData.customName || vTitle; 
+        }
         const rColors = { common: 'text-gray-400', rare: 'text-blue-400', epic: 'text-purple-400', legendary: 'text-amber-400' };
         
+        // BUDOWANIE HTML
         el.innerHTML = `
             <div class="flex gap-3">
                 <div class="w-20 h-20 rounded-md bg-gray-700/50 flex-shrink-0 flex items-center justify-center p-2 border border-gray-600">
                    ${getIconHtml(v.type)}
                 </div>
                 <div class="flex-grow">
-                    <div class="flex justify-between"><h4 class="font-bold text-white leading-tight text-sm">${isOwned ? `<span class="w-2 h-2 rounded-full inline-block mr-1 bg-blue-500"></span>` : ''}${vTitle}</h4><span class="text-xs font-bold ${rColors[rarity]}">${rarity}</span></div>
+                    <div class="flex justify-between">
+                        <h4 class="font-bold text-white leading-tight text-sm">
+                           ${isOwned ? `<span class="w-2 h-2 rounded-full inline-block mr-1 ${v.status==='online'?'bg-blue-500':v.status==='in-use'?'bg-green-500':'bg-gray-500'}"></span>` : ''}
+                           ${vTitle}
+                        </h4>
+                        <span class="text-xs font-bold ${rColors[rarity]}">${rarity}</span>
+                    </div>
                     <p class="text-xs text-gray-400 mt-1">${v.type.toUpperCase()} • ${v.country || '-'}</p>
-                    <div class="mt-2 font-mono text-blue-400 font-bold">${isOwned ? 'Twoja flota' : fmt(price) + ' VC'}</div>
+                    <div class="flex justify-between items-end mt-2">
+                        <p class="text-xs text-gray-300">${ageInfo}</p>
+                        <div class="font-mono text-blue-400 font-bold text-lg">${isOwned ? 'Posiadany' : fmt(price) + ' VC'}</div>
+                    </div>
                 </div>
             </div>
+            
+            <div class="grid grid-cols-3 gap-x-2 gap-y-1 text-xs text-center border-t border-gray-700/50 pt-2 mt-1 bg-gray-900/30 rounded p-1">
+                <div><div class="text-gray-500">Moc</div><div class="font-semibold text-gray-300">${details.power}</div></div>
+                <div><div class="text-gray-500">V-max</div><div class="font-semibold text-gray-300">${details.maxSpeed}</div></div>
+                <div><div class="text-gray-500">V-śr.</div><div class="font-semibold text-gray-300">${details.avgSpeed}</div></div>
+                
+                <div><div class="text-gray-500">Zysk/km</div><div class="font-semibold text-green-400">${earningsPerKm.toFixed(2)}</div></div>
+                <div><div class="text-gray-500">Koszt/km</div><div class="font-semibold text-red-400">${costPerKm.toFixed(2)}</div></div>
+                <div><div class="text-gray-500">Netto</div><div class="font-bold text-blue-400">${netEarnings.toFixed(2)}</div></div>
+            </div>
+
+            ${isOwned ? `
+            <div class="grid grid-cols-2 gap-2 text-xs text-center border-t border-gray-700/50 pt-2">
+                <div class="bg-gray-800 rounded p-1">Przebieg: <span class="text-white font-mono">${fmt(ownedData.odo_km || 0)} km</span></div>
+                <div class="bg-gray-800 rounded p-1">Zarobek: <span class="text-green-400 font-mono">${fmt(ownedData.earned_vc || 0)} VC</span></div>
+            </div>` : ''}
+
             <div class="flex gap-2 mt-2">
-                ${isOwned ? `<button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-3 rounded text-sm" data-info-key="${key}">Info</button>` : ``}
-                ${isOwned ? `<button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 rounded text-sm" data-center="${key}"><i class="ri-focus-3-line"></i></button>` : `<button class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-1 px-3 rounded text-sm" data-buy="${key}|${price}">Kup</button>`}
+                ${isOwned 
+                    ? `<button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-3 rounded text-sm" data-info-key="${key}">Szczegóły</button>`
+                    : ``
+                }
+                ${isOwned
+                    ? `<button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 rounded text-sm" data-center="${key}" title="Pokaż na mapie"><i class="ri-focus-3-line"></i></button>`
+                    : `<button class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-1.5 px-3 rounded text-sm w-full" data-buy="${key}|${price}">KUP TERAZ</button>`
+                }
             </div>`;
         container.appendChild(el);
     });
