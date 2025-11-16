@@ -1,6 +1,6 @@
 // js/supabase.js - WERSJA Z OBSŁUGĄ STACJI
 import { state, logTransaction } from './state.js';
-import { updateUI, render } from './ui.js';
+import { updateUI, render } from './ui-core.js';
 import { map } from './state.js'; // Import mapy ze state.js
 import { $, fmt, showNotification } from './utils.js';
 import { config } from './config.js';

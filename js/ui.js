@@ -1,12 +1,14 @@
-// js/ui.js - KONTROLER AKCJI
+// js/ui.js - POPRAWIONY
 import { state, achievementsList, logTransaction } from './state.js';
 import { config, lootboxConfig } from './config.js';
 import { supabase } from './supabase.js';
-import { $, fmt, showNotification, showConfirm, getVehicleRarity, getIconHtml, ICONS } from './utils.js';
+import { $, fmt, showNotification, showConfirm, getVehicleRarity, getIconHtml } from './utils.js'; // Usunąłem zbędne importy
 import { map } from './state.js';
-import { render, updateUI, toggleContentPanel, openAssetDetailsModal, calculateAssetValue } from './ui-core.js'; // Importujemy z CORE
+// POPRAWIONY IMPORT PONIŻEJ:
+import { render, updateUI, toggleContentPanel, calculateAssetValue } from './ui-core.js'; 
 
-// ===== FUNKCJE AKCJI =====
+// ... (reszta pliku bez zmian - funkcje openLootbox, quickSellVehicle itd.) ...
+// ... (ale ponieważ prosiłeś o gotowce, wklejam całość poniżej, żebyś miał pewność) ...
 
 export function openLootbox(boxType) {
     const box = lootboxConfig[boxType];
@@ -135,7 +137,42 @@ function editVehicleName(key) {
     if (newName && newName.trim() !== "") { ownedData.customName = newName.trim(); render(); }
 }
 
-// ===== EVENT LISTENERS =====
+function calculateStatsFromLog(log, valueKey, periodHours) {
+    const now = Date.now();
+    const periodMs = periodHours * 3600000;
+    return log.filter(entry => now - entry.timestamp < periodMs).reduce((sum, entry) => sum + (entry[valueKey] || 0), 0);
+}
+
+// TA FUNKCJA JEST DEFINIOWANA TUTAJ, WIĘC NIE MOŻE BYĆ IMPORTOWANA
+export function openAssetDetailsModal(key) {
+    const [assetType, ...idParts] = key.split(':');
+    const id = idParts.join(':');
+    let asset, isVehicle = true, title;
+    if (assetType === 'station') {
+        const stationConfig = config.infrastructure[id];
+        const { type } = stationConfig;
+        let cat; 
+        switch(type) { case 'train': cat='trainStations'; break; case 'tube': cat='tubeStations'; break; case 'cable': cat='cableCar'; break; case 'river-bus': cat='riverPiers'; break; case 'bus': cat='busTerminals'; break; }
+        asset = state.infrastructure[cat][id];
+        title = stationConfig.name; isVehicle = false; asset.type = stationConfig.type;
+    } else { asset = state.owned[key]; title = asset.customName || asset.title; }
+    if (!asset) return;
+
+    const modal = $('asset-details-modal');
+    $('asset-details-icon').innerHTML = isVehicle ? `<div class="w-16 h-16">${getIconHtml(asset.type)}</div>` : `<div class="w-16 h-16">${getIconHtml('station_' + asset.type)}</div>`;
+    $('asset-details-title').textContent = title;
+    const grid = $('asset-details-grid');
+    const log = asset.earningsLog || [];
+    const profit_1h = calculateStatsFromLog(log, 'profit', 1);
+    const profit_total = asset.earned_vc || asset.totalEarnings || 0;
+    let statsHtml = `<div class="col-span-2">1h: ${fmt(profit_1h)} VC</div><div class="col-span-2">Total: ${fmt(profit_total)} VC</div>`;
+    grid.innerHTML = `<div class="grid grid-cols-4 gap-4 text-sm">${statsHtml}</div>`;
+    
+    const ctx = $('asset-earnings-chart').getContext('2d');
+    if (state.assetChart) state.assetChart.destroy();
+    state.assetChart = new Chart(ctx, { type: 'line', data: { labels: log.map((_, i) => i), datasets: [{ label: 'Zysk', data: log.map(d => d.profit), borderColor: '#3b82f6' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+    modal.style.display = 'flex';
+}
 
 export function setupEventListeners() {
     document.querySelectorAll('[data-nav-tab]').forEach(btn => {
@@ -156,6 +193,7 @@ export function setupEventListeners() {
     $('filters-container').addEventListener('change', e => { const parent = e.target.closest('div[id]'); if (!parent) return; const parentId = parent.id; if (parentId === 'filterType') state.filters.types = Array.from(parent.querySelectorAll('input:checked')).map(i => i.value); if (parentId === 'filterCountry') state.filters.countries = Array.from(parent.querySelectorAll('input:checked')).map(i => i.value); if (parentId === 'filterRarity') state.filters.rarities = Array.from(parent.querySelectorAll('input:checked')).map(i => i.value); if (parentId === 'filterMapView') state.filters.mapView = parent.querySelector('input:checked').value; render(); });
 
     $('mainList').addEventListener('click', e => {
+        // 1. Kupno pojazdu
         const buyTarget = e.target.closest('[data-buy]');
         if (buyTarget) { 
             e.stopPropagation(); 
@@ -176,6 +214,7 @@ export function setupEventListeners() {
             })(); 
             return; 
         }
+        // 2. Kupno stacji
         const buyStationTarget = e.target.closest('[data-buy-station]');
         if (buyStationTarget) { 
             e.stopPropagation(); 
@@ -194,8 +233,7 @@ export function setupEventListeners() {
             })();
             return; 
         }
-
-        // GILDIE
+        // 3. Gildie
         if (e.target.id === 'create-guild-btn') {
             const name = $('guild-name-input').value;
             if(name && state.wallet >= config.guilds.creationCost) {
@@ -208,7 +246,6 @@ export function setupEventListeners() {
         }
         const joinBtn = e.target.closest('[data-join-guild]');
         if (joinBtn) { const gid = joinBtn.dataset.joinGuild; state.guild.playerGuildId = gid; state.guild.guilds[gid].members.push(state.profile.companyName); render(); showNotification("Dołączono!"); }
-        
         const buyAssetBtn = e.target.closest('[data-buy-guild-asset]');
         if (buyAssetBtn) {
             const key = buyAssetBtn.dataset.buyGuildAsset;
@@ -243,7 +280,8 @@ export function setupEventListeners() {
         if (e.target.closest('[data-leave-guild]')) {
             showConfirm("Opuścić gildię?", () => { const gid = state.guild.playerGuildId; state.guild.guilds[gid].members = state.guild.guilds[gid].members.filter(m => m !== state.profile.companyName); state.guild.playerGuildId = null; render(); });
         }
-
+        
+        // ... reszta listenerów ...
         const claimTarget = e.target.closest('[data-claim]'); if (claimTarget) { e.stopPropagation(); const key = claimTarget.dataset.claim; const ach = achievementsList[key]; state.wallet += ach.reward.vc; state.profile.xp += ach.reward.xp; state.achievements[key].claimed = true; render(); return; }
         const openBoxTarget = e.target.closest('[data-open-box]'); if (openBoxTarget) { e.stopPropagation(); openLootbox(openBoxTarget.dataset.openBox); return; }
         const vehicleItem = e.target.closest('[data-key]'); if (vehicleItem && !e.target.closest('button')) { state.selectedVehicleKey = vehicleItem.dataset.key; render(); }
@@ -257,21 +295,7 @@ export function setupEventListeners() {
         const colorTarget = e.target.closest('[data-color]'); if(colorTarget) { state.profile.color = colorTarget.dataset.color; updateUI(); render(); }
         
         const buyMarketTarget = e.target.closest('[data-buy-market]');
-        if (buyMarketTarget) { 
-            e.stopPropagation(); 
-            const index = parseInt(buyMarketTarget.dataset.buyMarket, 10); 
-            const listing = state.marketListings[index]; 
-            if (!listing) { showNotification('Oferta nieaktualna!', true); state.marketListings.splice(index, 1); render(); return; } 
-            if (state.wallet >= listing.price) { 
-                state.wallet -= listing.price; 
-                logTransaction(-listing.price, `Zakup z giełdy: ${listing.vehicle.title || listing.vehicle.customName}`); 
-                const key = `${listing.vehicle.type}:${listing.vehicle.id}`; 
-                state.owned[key] = { ...listing.vehicle }; 
-                state.marketListings.splice(index, 1); 
-                showNotification(`Kupiono z giełdy!`); 
-                render(); 
-            } else { showNotification('Za mało środków!', true); } 
-        }
+        if (buyMarketTarget) { e.stopPropagation(); const index = parseInt(buyMarketTarget.dataset.buyMarket, 10); const listing = state.marketListings[index]; if (!listing) { showNotification('Oferta nieaktualna!', true); state.marketListings.splice(index, 1); render(); return; } if (state.wallet >= listing.price) { state.wallet -= listing.price; logTransaction(-listing.price, `Zakup z giełdy: ${listing.vehicle.title || listing.vehicle.customName}`); const key = `${listing.vehicle.type}:${listing.vehicle.id}`; state.owned[key] = { ...listing.vehicle }; state.marketListings.splice(index, 1); showNotification(`Kupiono z giełdy!`); render(); } else { showNotification('Za mało środków!', true); } }
     });
 
     $('vehicle-card').addEventListener('click', e => {
