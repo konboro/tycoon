@@ -1,7 +1,8 @@
 import { state, logTransaction, checkLevelUp, achievementsList } from './state.js';
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
-import { updateUI, render } from './ui.js';
+// POPRAWKA: Importujemy z ui-core.js, a nie ui.js
+import { updateUI, render } from './ui-core.js';
 import { fetchTrainStationData, fetchTfLArrivals, fetchMbtaBusTerminalData, fetchCableCarStatus } from './api.js';
 import { supabase } from './supabase.js';
 
@@ -88,26 +89,19 @@ export function tickEconomy() {
     updateUI(inMin, outMin);
 }
 
-// --- NOWOŚĆ: FUNKCJA OBROTU GILDII (ELEKTROWNIE) ---
 export function tickGuilds() {
     for (const guildId in state.guild.guilds) {
         const guild = state.guild.guilds[guildId];
         let tickIncome = 0;
-
-        // Oblicz dochód z posiadanych elektrowni
         for(const assetKey in guild.ownedAssets) {
             const asset = config.guildAssets[assetKey];
-            if(asset) {
-                tickIncome += asset.incomePerTick;
-            }
+            if(asset) tickIncome += asset.incomePerTick;
         }
 
         if (tickIncome > 0) {
-            guild.bank += tickIncome; // Kasa leci do skarbca
-            
-            // Dywidenda dla członka (jeśli to Twoja gildia)
+            guild.bank += tickIncome;
             if (state.guild.playerGuildId === guildId) {
-                const perMemberShare = Math.floor(tickIncome * 0.05); // 5% dla gracza
+                const perMemberShare = Math.floor(tickIncome * 0.05); 
                 if (perMemberShare > 0) {
                     state.wallet += perMemberShare;
                     logTransaction(perMemberShare, `Dywidenda: ${guild.name}`);
@@ -116,7 +110,6 @@ export function tickGuilds() {
             }
         }
     }
-    // Jeśli jesteśmy w zakładce gildii, odśwież widok (żeby widać było rosnący skarbiec)
     if (state.activeTab === 'guild') render();
 }
 
