@@ -1,16 +1,17 @@
-// js/main.js - WERSJA Z MAPTILER (SATELLITE)
-import { state, map } from './state.js'; // Importujemy mapę ze state.js, żeby uniknąć błędów "addLayer"
+import { state, map } from './state.js';
 import { $ } from './utils.js';
 import { fetchPlanes, fetchBUS, fetchTUBE, fetchFI, fetchEnergyPrices, fetchGlobalTakenVehicles, updateVehiclesWithWeather } from './api.js';
 import { tickEconomy, tickAllInfrastructure } from './logic.js';
 import { setupEventListeners, render, updateUI, showPlayerLocation, generateAIPlayers, logDailyEarnings, updateRankings, redrawMap } from './ui.js';
 import { handleLogin, handleRegister } from './supabase.js';
 
-// KONFIGURACJA MAPY (MapTiler Satellite)
-// Używamy formatu Raster XYZ (.jpg), bo to Leaflet
+// KONFIGURACJA KAFELKÓW (MapTiler Satellite)
+// Używamy formatu Raster XYZ (.jpg), bo to Leaflet.
+// Klucz API jest Twój.
 const MAP_KEY = 'gVLyar0EiT75LpMPvAGQ';
 const MAP_URL = `https://api.maptiler.com/maps/satellite/{z}/{x}/{y}.jpg?key=${MAP_KEY}`;
 
+// Dodajemy warstwę kafelków do mapy zaimportowanej ze state.js
 L.tileLayer(MAP_URL, { 
     attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>',
     tileSize: 512, 
@@ -48,7 +49,7 @@ async function init() {
           fetchEnergyPrices()
       ]);
   } catch (e) {
-      console.warn("Niektóre dane API nie zostały pobrane:", e);
+      console.warn("Niektóre dane API nie zostały pobrane (możliwy błąd sieci/proxy):", e);
   }
 
   await fetchGlobalTakenVehicles();
