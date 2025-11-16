@@ -21,8 +21,6 @@ import {
 import { setupEventListeners } from './ui.js';
 import { handleLogin, handleRegister } from './supabase.js';
 
-// --- ZMIANA JEST TUTAJ ---
-// Używamy Twojego klucza i stylu "streets-v4", ale w formacie .png
 const MAP_KEY = 'gVLyar0EiT75LpMPvAGQ';
 const MAP_URL = `https://api.maptiler.com/maps/streets-v4/512/{z}/{x}/{y}.png?key=${MAP_KEY}`;
 
@@ -30,10 +28,15 @@ L.tileLayer(MAP_URL, {
     attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a>',
     tileSize: 512, 
     zoomOffset: -1, 
-    maxZoom: 22, // Styl uliczny ma bardzo duży zoom
+    maxZoom: 22,
+    
+    // --- TO JEST POPRAWKA ---
+    // Nie pozwala Leafletowi prosić o kafelki na zoomie -1
+    minZoom: 0,
+    // -------------------------
+
     crossOrigin: true
 }).addTo(map);
-// --- KONIEC ZMIANY ---
 
 // Tworzymy warstwę dla budynków (z-index wyżej niż pojazdy)
 map.createPane('buildingsPane');
