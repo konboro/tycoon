@@ -1,5 +1,4 @@
-// js/logic.js - POPRAWIONY (BEZ DUPLIKATÓW)
-import { state, logTransaction, achievementsList } from './state.js'; // USUNIĘTO checkLevelUp STĄD
+import { state, logTransaction, achievementsList, checkAchievements, checkLevelUp } from './state.js'; // <-- TU JEST POPRAWKA
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
@@ -17,11 +16,7 @@ export function tickEconomy() {
         const ownedData = state.owned[key];
         const liveData = state.vehicles[ownedData.type]?.get(ownedData.id);
         
-        // Jeśli brak danych live, pomijamy (chyba że chcesz symulować)
-        if (!liveData || !isFinite(liveData.lat) || !isFinite(liveData.lon)) { 
-            ownedData.isMoving = false; 
-            continue; 
-        }
+        if (!liveData || !isFinite(liveData.lat) || !isFinite(liveData.lon)) { ownedData.isMoving = false; continue; }
 
         const prevLat = ownedData.lat; const prevLon = ownedData.lon;
         ownedData.lat = liveData.lat; ownedData.lon = liveData.lon;
@@ -90,8 +85,8 @@ export function tickEconomy() {
     state.profile.earnings_history.push(currentTickEarnings);
     if(state.profile.earnings_history.length > 60) state.profile.earnings_history.shift();
     
-    checkAchievements(); // Teraz wywołujemy funkcję zdefiniowaną na dole tego pliku
-    checkLevelUp();      // Teraz wywołujemy funkcję zdefiniowaną na dole tego pliku
+    checkAchievements(); // Teraz ta funkcja jest zaimportowana
+    checkLevelUp();      // Ta też
     updateUI(inMin, outMin);
 }
 
@@ -109,8 +104,8 @@ export function tickGuilds() {
                 const perMemberShare = Math.floor(tickIncome * 0.05); 
                 if (perMemberShare > 0) {
                     state.wallet += perMemberShare;
-                    // logTransaction(perMemberShare, `Dywidenda: ${guild.name}`); // Opcjonalnie wyłącz, żeby nie spamować
-                    // showNotification(`💰 Dywidenda: +${fmt(perMemberShare)} VC`);
+                    logTransaction(perMemberShare, `Dywidenda: ${guild.name}`);
+                    showNotification(`💰 Dywidenda: +${fmt(perMemberShare)} VC`);
                 }
             }
         }
@@ -127,7 +122,7 @@ export const tickAllInfrastructure = () => {
     tickCableCar();
 };
 
-// ===== FUNKCJE POMOCNICZE =====
+// ===== FUNKCJE POMOCNICZE (LOGIKA GRY) =====
 
 export function calculateAssetValue() {
     const fleetValue = Object.values(state.owned).reduce((sum, v) => sum + (config.basePrice[v.type] || 0), 0);
@@ -174,28 +169,7 @@ export function updateRankings() {
     state.rankings.weeklyEarnings = updateList(state.rankings.weeklyEarnings, 'weeklyEarnings'); 
 }
 
-// ===== NOWE DEFINICJE FUNKCJI (ŻEBY NIE BYŁO BŁĘDU NOT DEFINED) =====
-
-export function checkAchievements() { 
-    for (const key in achievementsList) { 
-        if (!state.achievements[key] && achievementsList[key].check()) { 
-            state.achievements[key] = { unlocked: true, claimed: false, date: new Date().toISOString() }; 
-            showNotification(`🏆 Osiągnięcie: ${achievementsList[key].title}`);
-        } 
-    } 
-    updateUI(); 
-}
-
-export function checkLevelUp() { 
-    function xpNeededForLevel(level) { return 100 + (level - 1) * 50; } 
-    while (state.profile.xp >= xpNeededForLevel(state.profile.level)) { 
-        state.profile.xp -= xpNeededForLevel(state.profile.level); 
-        state.profile.level++; 
-        showNotification(`⭐ Awans na poziom ${state.profile.level}!`);
-    } 
-}
-
-// ===== INFRASTRUKTURA =====
+// ===== LOGIKA INFRASTRUKTURY =====
 
 async function tickTrainStations() { 
     for (const stationCode in state.infrastructure.trainStations) { 
