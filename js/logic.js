@@ -1,6 +1,5 @@
-// POPRAWKA JEST TUTAJ: Importujemy logikę osiągnięć z 'achievements.js'
-import { state, logTransaction } from './state.js';
-import { achievementsList, checkAchievements, checkLevelUp } from './achievements.js'; 
+// js/logic.js - POPRAWIONE IMPORTY
+import { state, logTransaction, achievementsList, checkAchievements, checkLevelUp } from './state.js';
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
@@ -87,8 +86,8 @@ export function tickEconomy() {
     state.profile.earnings_history.push(currentTickEarnings);
     if(state.profile.earnings_history.length > 60) state.profile.earnings_history.shift();
     
-    checkAchievements(); // Ta funkcja jest teraz poprawnie zaimportowana
-    checkLevelUp();      // Ta funkcja jest teraz poprawnie zaimportowana
+    checkAchievements(); // Teraz zaimportowane poprawnie ze state.js
+    checkLevelUp();      // Teraz zaimportowane poprawnie ze state.js
     updateUI(inMin, outMin);
 }
 
