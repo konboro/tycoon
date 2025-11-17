@@ -1,5 +1,6 @@
-// js/logic.js - POPRAWIONE IMPORTY
-import { state, logTransaction, achievementsList } from './state.js'; // <- POPRAWKA JEST TUTAJ
+// POPRAWKA JEST TUTAJ: Importujemy logikę osiągnięć z 'achievements.js'
+import { state, logTransaction } from './state.js';
+import { achievementsList, checkAchievements, checkLevelUp } from './achievements.js'; 
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
@@ -86,8 +87,8 @@ export function tickEconomy() {
     state.profile.earnings_history.push(currentTickEarnings);
     if(state.profile.earnings_history.length > 60) state.profile.earnings_history.shift();
     
-    checkAchievements();
-    checkLevelUp();
+    checkAchievements(); // Ta funkcja jest teraz poprawnie zaimportowana
+    checkLevelUp();      // Ta funkcja jest teraz poprawnie zaimportowana
     updateUI(inMin, outMin);
 }
 
@@ -168,27 +169,6 @@ export function updateRankings() {
     }; 
     state.rankings.assetValue = updateList(state.rankings.assetValue, 'assetValue'); 
     state.rankings.weeklyEarnings = updateList(state.rankings.weeklyEarnings, 'weeklyEarnings'); 
-}
-
-// ===== DEFINICJE FUNKCJI (ZAMIAST IMPORTU) =====
-
-export function checkAchievements() { 
-    for (const key in achievementsList) { 
-        if (!state.achievements[key] && achievementsList[key].check()) { 
-            state.achievements[key] = { unlocked: true, claimed: false, date: new Date().toISOString() }; 
-            showNotification(`🏆 Osiągnięcie: ${achievementsList[key].title}`);
-        } 
-    } 
-    updateUI(); 
-}
-
-export function checkLevelUp() { 
-    function xpNeededForLevel(level) { return 100 + (level - 1) * 50; } 
-    while (state.profile.xp >= xpNeededForLevel(state.profile.level)) { 
-        state.profile.xp -= xpNeededForLevel(state.profile.level); 
-        state.profile.level++; 
-        showNotification(`⭐ Awans na poziom ${state.profile.level}!`);
-    } 
 }
 
 // ===== LOGIKA INFRASTRUKTURY =====
