@@ -1,4 +1,7 @@
-import { state, achievementsList, logTransaction } from './state.js';
+// Na górze js/ui.js
+import { state, logTransaction } from './state.js';
+import { achievementsList } from './achievements.js'; // <-- NOWY IMPORT
+// ... (reszta importów) ...
 import { config, lootboxConfig } from './config.js';
 import { supabase } from './supabase.js';
 import { $, fmt, showNotification, showConfirm, getVehicleRarity, getIconHtml } from './utils.js';

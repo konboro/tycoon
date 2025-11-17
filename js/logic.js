@@ -1,5 +1,6 @@
 // js/logic.js - POPRAWIONE IMPORTY
-import { state, logTransaction, achievementsList } from './state.js'; // <- POPRAWKA JEST TUTAJ
+import { state, logTransaction } from './state.js';
+import { checkAchievements, checkLevelUp } from './achievements.js'; // <-- NOWY IMPORT
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
