@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { config } from './config.js';
 import { map } from './state.js';
 import { $, fmt, getProximityBonus, createIcon, getIconHtml, ICONS, getWeatherIcon } from './utils.js';
-import { calculateAssetValue } from './logic.js'; // Importujemy kalkulację wartości z logic.js
+import { calculateAssetValue } from './logic.js'; // <-- POPRAWKA: Prawidłowy import
 
 // Importujemy "Malarzy"
 import { 
@@ -37,7 +37,7 @@ function getCompanyInfoPopupContent() {
     Object.values(state.infrastructure).forEach(category => {
         Object.values(category).forEach(item => { if (item.owned) buildingCount++; });
     });
-    const companyValue = calculateAssetValue(); 
+    const companyValue = calculateAssetValue(); // Używamy importowanej funkcji
     return `<div style="font-family: 'Inter', sans-serif;"><h3 style="margin: 0; font-size: 16px; font-weight: bold;">${companyName}</h3><ul style="list-style: none; padding: 0; margin: 8px 0 0 0; font-size: 14px;"><li style="margin-bottom: 4px;"><strong>Pojazdy:</strong> ${vehicleCount}</li><li style="margin-bottom: 4px;"><strong>Budynki:</strong> ${buildingCount}</li><li><strong>Wartość firmy:</strong> ${fmt(companyValue)} VC</li></ul></div>`;
 }
 
@@ -88,8 +88,6 @@ export function updatePlayerMarkerIcon() {
         state.playerMarker.setIcon(playerIcon);
     }
 }
-
-// ===== 2. RYSOWANIE MAPY =====
 
 export function redrawMap() {
     const visibleKeys = new Set();
@@ -206,20 +204,20 @@ export function redrawMap() {
 // ===== 3. GŁÓWNA AKTUALIZACJA UI (KPI) =====
 
 export function updateUI(inM, outM) {
-    const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
-    setTxt('wallet', fmt(state.wallet));
-    setTxt('company-name', state.profile.companyName);
-    setTxt('level', state.profile.level);
-    setTxt('xp', Math.round(state.profile.xp));
-    setTxt('xpNext', 100 + (state.profile.level-1)*50);
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    set('wallet', fmt(state.wallet));
+    set('company-name', state.profile.companyName);
+    set('level', state.profile.level);
+    set('xp', Math.round(state.profile.xp));
+    set('xpNext', 100 + (state.profile.level-1)*50);
     const xpBar = $('xpProgressBar'); if(xpBar) xpBar.style.width = `${(state.profile.xp / (100+(state.profile.level-1)*50))*100}%`;
     
-    setTxt('owned-vehicles-count', Object.keys(state.owned).length);
+    set('owned-vehicles-count', Object.keys(state.owned).length);
     const buildingCount = Object.values(state.infrastructure).reduce((sum, category) => sum + Object.values(category).filter(item => item.owned).length, 0);
-    setTxt('owned-buildings-count', buildingCount);
+    set('owned-buildings-count', buildingCount);
     
     const estimatedAssets = Math.max(0, calculateAssetValue() - state.wallet); 
-    setTxt('estimated-assets', fmt(estimatedAssets));
+    set('estimated-assets', fmt(estimatedAssets));
     
     // Odometer
     const earningsHistory = state.profile.earnings_history || [];
@@ -243,11 +241,10 @@ export function updateUI(inM, outM) {
     }
 }
 
-// ===== 4. GŁÓWNY RENDERER (TERAZ JEST POPRAWNY) =====
+// ===== 4. GŁÓWNY RENDERER =====
 
 const panelTitles = { stations: "Infrastruktura", store: "Sklep", fleet: "Moja Flota", market: "Giełda", lootbox: "Skrzynki", achievements: "Osiągnięcia", stats: "Statystyki", friends: "Znajomi", rankings: "Ranking", energy: "Ceny Energii", guild: "Gildia", transactions: "Historia Transakcji", company: "Personalizacja Firmy" };
 
-// GŁÓWNA FUNKCJA RENDERUJĄCA
 export function render() {
     const listContainer = $('mainList');
     if(!listContainer) return;
