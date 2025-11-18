@@ -1,5 +1,4 @@
-// js/logic.js - WERSJA FINALNA I POPRAWNA
-import { state, logTransaction, achievementsList, checkAchievements, checkLevelUp, calculateAssetValue } from './state.js'; 
+import { state, logTransaction, achievementsList, checkAchievements, checkLevelUp } from './state.js';
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
