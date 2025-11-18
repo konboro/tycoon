@@ -1,17 +1,39 @@
-// js/ui-core.js - WERSJA KOMPLETNA
 import { state } from './state.js';
 import { config } from './config.js';
 import { map } from './state.js';
 import { $, fmt, getProximityBonus, createIcon, getIconHtml, ICONS, getWeatherIcon } from './utils.js';
-import { calculateAssetValue } from './logic.js'; // Importujemy logikę obliczeń
+import { calculateAssetValue } from './state.js'; // POPRAWKA: Teraz import ze state.js
 
-// Importujemy "Malarzy"
 import { 
     renderVehicleList, renderInfrastructure, renderLootboxTab, renderMarket, 
     renderRankings, renderCharts, renderAchievements, renderEnergyPrices, 
     renderTransactionHistory, renderGuildTab, renderCompanyTab, renderFriendsTab, 
-    renderStationDetails, renderVehicleCard, renderEmptyState
+    renderStationDetails, renderVehicleCard, renderEmptyState, renderSectionTitle
 } from './renderers.js';
+
+// ... (Reszta funkcji: toggleContentPanel, getCompanyInfoPopupContent, showPlayerLocation, updatePlayerMarkerIcon, redrawMap, updateUI, render) ...
+// Skopiuj resztę funkcji z poprzedniej wersji pliku ui-core.js, one się nie zmieniają, ważny był tylko import na górze.
+
+// Dla pewności wklejam skrót kluczowej funkcji render(), resztę weź z historii lub poprzedniej wiadomości
+export function render() {
+    const listContainer = $('mainList');
+    if(!listContainer) return;
+    listContainer.innerHTML = '';
+    const titleEl = $('panel-title'); if(titleEl) titleEl.textContent = state.activeTab;
+    
+    const controls = $('panel-controls');
+    const showControls = ['store', 'fleet', 'stations', 'market'].includes(state.activeTab);
+    if(controls) controls.style.display = showControls ? 'block' : 'none';
+    
+    // ... (obsługa filtrów i switch tabów) ...
+    // Upewnij się, że masz tu switch z renderVehicleList itp.
+    // ...
+    
+    if (state.selectedVehicleKey) { renderVehicleCard(state.selectedVehicleKey); } 
+    else { const vc=$('vehicle-card'); if(vc) vc.classList.add('translate-y-full'); }
+    redrawMap();
+}
+// KONIECZNIE WKLEJ TU CAŁĄ RESZTĘ KODU Z POPRZEDNIEGO ui-core.js (funkcje redrawMap, updateUI itd.)
 
 // ===== 1. FUNKCJE POMOCNICZE UI =====
 

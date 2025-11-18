@@ -1,3 +1,5 @@
+import { config } from './config.js'; // Potrzebne do obliczeń wartości
+
 export const state = {
   vehicles: { plane: new Map(), train: new Map(), tube: new Map(), bus: new Map(), bike: new Map(), 'river-bus': new Map(), tram: new Map() },
   profile: { companyName: null, logo: '🏢', color: 'blue', level: 1, xp: 0, km_total: 0, total_earned: 0, reputation: {}, minutes_in_transit: 0, earnings_history: [], dailyEarningsHistory: [], services_done: 0, upgrades_done: 0, transaction_history: [], friends: [] },
@@ -10,7 +12,7 @@ export const state = {
   infrastructure: {
       trainStations: { HKI: { owned: false, totalEarnings: 0, arrivals: 0, departures: 0, hourlyEarnings: 0, earningsLog: [] }, TPE: { owned: false, totalEarnings: 0, arrivals: 0, departures: 0, hourlyEarnings: 0, earningsLog: [] } },
       tubeStations: { VIC: { owned: false, totalEarnings: 0, arrivals: 0, hourlyEarnings: 0, earningsLog: [] } },
-      busTerminals: { SOU: { owned: false, totalEarnings: 0, arrivals: 0, hourlyEarnings: 0, earningsLog: [] } },
+      busTerminals: { SOU: { owned: false, totalEarnings: 0, arrivals: 0, hourlyEarnings: 0, earningsLog: [] }, VCS: { owned: false, totalEarnings: 0, arrivals: 0, hourlyEarnings: 0, earningsLog: [] }, TFS: { owned: false, totalEarnings: 0, arrivals: 0, hourlyEarnings: 0, earningsLog: [] } },
       riverPiers: { WSP: { owned: false, totalEarnings: 0, arrivals: 0, hourlyEarnings: 0, earningsLog: [] } },
       cableCar: { LCC: { owned: false, totalEarnings: 0, status: 'Unknown', hourlyEarnings: 0, earningsLog: [] } }
   },
@@ -19,7 +21,8 @@ export const state = {
   stationData: { HKI: [], TPE: [], VIC: [], SOU: [], LCC: [], WSP: [] },
   lastPos: new Map(),
   globalTaken: new Set(),
-  achievements: {}, marketDemand: {},
+  achievements: {}, 
+  marketDemand: {},
   filters: { types: ['plane', 'train', 'tube', 'tram', 'bus', 'bike', 'river-bus'], countries: ['Poland', 'USA', 'Finland', 'UK', 'Europe'], rarities: ['common', 'rare', 'epic', 'legendary'], mapView: 'all' },
   activeTab: null,
   selectedVehicleKey: null, selectedStationId: null,
@@ -29,6 +32,10 @@ export const state = {
   playerLocation: null,
   proximityCircle: null
 };
+
+// Definicja mapy
+export const map = (typeof L !== 'undefined') ? L.map('map', { zoomControl: true }).setView([52.23, 21.01], 6) : null;
+
 export const achievementsList = {
   FIRST_PURCHASE: { title: "Pierwszy zakup", description: "Kup swój pierwszy pojazd.", reward: { vc: 1000, xp: 50 }, check: () => Object.keys(state.owned).length >= 1, progress: () => ({ current: Object.keys(state.owned).length, target: 1 }) },
   TEN_VEHICLES: { title: "Mała flota", description: "Posiadaj 10 pojazdów.", reward: { vc: 5000, xp: 200 }, check: () => Object.keys(state.owned).length >= 10, progress: () => ({ current: Object.keys(state.owned).length, target: 10 }) },
@@ -43,8 +50,20 @@ export const achievementsList = {
   FIRST_UPGRADE: { title: "Pierwsze ulepszenie", description: "Ulepsz dowolny pojazd.", reward: { vc: 10000, xp: 200 }, check: () => state.profile.upgrades_done >= 1, progress: () => ({ current: state.profile.upgrades_done, target: 1 }) },
   MAX_OUT_VEHICLE: { title: "Maksymalna moc", description: "Ulepsz dowolny pojazd do maksymalnego poziomu.", reward: { vc: 100000, xp: 2000 }, check: () => Object.values(state.owned).some(v => v.level >= 5), progress: () => ({ current: Math.max(0, ...Object.values(state.owned).map(v => v.level)), target: 5 }) },
 };
-export function logTransaction(amount, description) { if (!state.profile.transaction_history) state.profile.transaction_history = []; state.profile.transaction_history.unshift({ amount, description, timestamp: new Date().toISOString(), balance: state.wallet }); if (state.profile.transaction_history.length > 200) state.profile.transaction_history.pop(); }
-export function checkLevelUp() { function xpNeededForLevel(level) { return 100 + (level - 1) * 50; } while (state.profile.xp >= xpNeededForLevel(state.profile.level)) { state.profile.xp -= xpNeededForLevel(state.profile.level); state.profile.level++; } }
-// Zabezpieczenie: Twórz mapę tylko, jeśli biblioteka Leaflet (L) istnieje
-// Dzięki temu admin.html (który nie ma mapy) nie wywali błędu
-export const map = (typeof L !== 'undefined') ? L.map('map', { zoomControl: true }).setView([52.23, 21.01], 6) : null;
+
+export function logTransaction(amount, description) { 
+    if (!state.profile.transaction_history) state.profile.transaction_history = []; 
+    state.profile.transaction_history.unshift({ amount, description, timestamp: new Date().toISOString(), balance: state.wallet }); 
+    if (state.profile.transaction_history.length > 200) state.profile.transaction_history.pop(); 
+}
+
+// --- NOWOŚĆ: Ta funkcja jest teraz tutaj, żeby nie było cyklu ---
+export function calculateAssetValue() {
+    const fleetValue = Object.values(state.owned).reduce((sum, v) => sum + (config.basePrice[v.type] || 0), 0);
+    const infraValue = Object.values(state.infrastructure).reduce((sum, category) => {
+        return sum + Object.keys(category).reduce((catSum, key) => {
+            return catSum + (category[key].owned ? config.infrastructure[key].price : 0);
+        }, 0);
+    }, 0);
+    return state.wallet + fleetValue + infraValue;
+}

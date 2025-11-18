@@ -1,10 +1,31 @@
-// js/logic.js - POPRAWIONY (BEZ DUPLIKATÓW)
-import { state, logTransaction, achievementsList } from './state.js'; // USUNIĘTO checkLevelUp STĄD
+import { state, logTransaction, achievementsList } from './state.js'; // state.js już nie importuje UI
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
 import { fetchTrainStationData, fetchTfLArrivals, fetchMbtaBusTerminalData, fetchCableCarStatus } from './api.js';
 import { supabase } from './supabase.js';
+import { calculateAssetValue } from './state.js'; // Importujemy kalkulację ze stanu
+
+// ===== DEFINICJE FUNKCJI LOGICZNYCH (Muszą być przed ich użyciem) =====
+
+export function checkAchievements() { 
+    for (const key in achievementsList) { 
+        if (!state.achievements[key] && achievementsList[key].check()) { 
+            state.achievements[key] = { unlocked: true, claimed: false, date: new Date().toISOString() }; 
+            showNotification(`🏆 Osiągnięcie: ${achievementsList[key].title}`);
+        } 
+    } 
+    updateUI(); 
+}
+
+export function checkLevelUp() { 
+    function xpNeededForLevel(level) { return 100 + (level - 1) * 50; } 
+    while (state.profile.xp >= xpNeededForLevel(state.profile.level)) { 
+        state.profile.xp -= xpNeededForLevel(state.profile.level); 
+        state.profile.level++; 
+        showNotification(`⭐ Awans na poziom ${state.profile.level}!`);
+    } 
+}
 
 // ===== GŁÓWNE CYKLE (TICKS) =====
 
@@ -17,7 +38,6 @@ export function tickEconomy() {
         const ownedData = state.owned[key];
         const liveData = state.vehicles[ownedData.type]?.get(ownedData.id);
         
-        // Jeśli brak danych live, pomijamy (chyba że chcesz symulować)
         if (!liveData || !isFinite(liveData.lat) || !isFinite(liveData.lon)) { 
             ownedData.isMoving = false; 
             continue; 
@@ -40,11 +60,9 @@ export function tickEconomy() {
         const type = ownedData.type;
         const country = liveData.country || 'Europe';
         const levelIndex = (ownedData.level || 1) - 1;
-        
         const reputationBonus = 1 + Math.floor((state.profile.reputation[type] || 0) / 1000) * 0.05;
         const levelBonus = config.upgrade.bonus[levelIndex] || 1;
         const proximityBonus = getProximityBonus(ownedData.lat, ownedData.lon, state.playerLocation);
-
         const baseRate = config.baseRate[type] || 1;
         const inc = km * baseRate * reputationBonus * levelBonus * proximityBonus;
         let energyCost = 0;
@@ -79,7 +97,6 @@ export function tickEconomy() {
             delete state.owned[key];
             continue;
         }
-
         if (!ownedData.earningsLog) ownedData.earningsLog = [];
         ownedData.earningsLog.push({ timestamp: Date.now(), profit: delta, km: km });
         if (ownedData.earningsLog.length > 100) ownedData.earningsLog.shift();
@@ -90,8 +107,8 @@ export function tickEconomy() {
     state.profile.earnings_history.push(currentTickEarnings);
     if(state.profile.earnings_history.length > 60) state.profile.earnings_history.shift();
     
-    checkAchievements(); // Teraz wywołujemy funkcję zdefiniowaną na dole tego pliku
-    checkLevelUp();      // Teraz wywołujemy funkcję zdefiniowaną na dole tego pliku
+    checkAchievements();
+    checkLevelUp();
     updateUI(inMin, outMin);
 }
 
@@ -109,8 +126,6 @@ export function tickGuilds() {
                 const perMemberShare = Math.floor(tickIncome * 0.05); 
                 if (perMemberShare > 0) {
                     state.wallet += perMemberShare;
-                    // logTransaction(perMemberShare, `Dywidenda: ${guild.name}`); // Opcjonalnie wyłącz, żeby nie spamować
-                    // showNotification(`💰 Dywidenda: +${fmt(perMemberShare)} VC`);
                 }
             }
         }
@@ -127,13 +142,7 @@ export const tickAllInfrastructure = () => {
     tickCableCar();
 };
 
-// ===== FUNKCJE POMOCNICZE =====
-
-export function calculateAssetValue() {
-    const fleetValue = Object.values(state.owned).reduce((sum, v) => sum + (config.basePrice[v.type] || 0), 0);
-    const infraValue = Object.values(state.infrastructure).reduce((sum, category) => { return sum + Object.keys(category).reduce((catSum, key) => { return catSum + (category[key].owned ? config.infrastructure[key].price : 0); }, 0); }, 0);
-    return state.wallet + fleetValue + infraValue;
-}
+// ===== FUNKCJE POMOCNICZE (AI, EARNINGS) =====
 
 export function generateAIPlayers() { 
     if (state.rankings.assetValue.length > 0) return; 
@@ -174,74 +183,7 @@ export function updateRankings() {
     state.rankings.weeklyEarnings = updateList(state.rankings.weeklyEarnings, 'weeklyEarnings'); 
 }
 
-// ===== NOWE DEFINICJE FUNKCJI (ŻEBY NIE BYŁO BŁĘDU NOT DEFINED) =====
-
-export function checkAchievements() { 
-    for (const key in achievementsList) { 
-        if (!state.achievements[key] && achievementsList[key].check()) { 
-            state.achievements[key] = { unlocked: true, claimed: false, date: new Date().toISOString() }; 
-            showNotification(`🏆 Osiągnięcie: ${achievementsList[key].title}`);
-        } 
-    } 
-    updateUI(); 
-}
-
-export function checkLevelUp() { 
-    function xpNeededForLevel(level) { return 100 + (level - 1) * 50; } 
-    while (state.profile.xp >= xpNeededForLevel(state.profile.level)) { 
-        state.profile.xp -= xpNeededForLevel(state.profile.level); 
-        state.profile.level++; 
-        showNotification(`⭐ Awans na poziom ${state.profile.level}!`);
-    } 
-}
-
-// ===== INFRASTRUKTURA =====
-
-async function tickTrainStations() { 
-    for (const stationCode in state.infrastructure.trainStations) { 
-        try { 
-            const station = state.infrastructure.trainStations[stationCode]; 
-            if (!station.owned) continue; 
-            const stationConfig = config.infrastructure[stationCode]; 
-            const proximityBonus = getProximityBonus(stationConfig.lat, stationConfig.lon, state.playerLocation); 
-            const trains = await fetchTrainStationData(stationConfig.apiId); 
-            
-            if (!Array.isArray(trains)) { state.stationData[stationCode] = []; continue; } 
-            state.stationData[stationCode] = trains; 
-            
-            let earningsThisTick = 0; let departures = 0; let arrivals = 0; 
-            for (const train of trains) { 
-                const trainId = `${train.trainNumber}-${train.departureDate}`; 
-                const stationData = train.timeTableRows.find(row => row.stationShortCode === stationConfig.apiId); 
-                if (!stationData) continue; 
-                
-                if (!state.trainLog[trainId]) state.trainLog[trainId] = { departedPaid: false, arrivedPaid: false }; 
-                let penaltyFactor = 1.0;
-                if (stationData.actualTime && stationData.scheduledTime) {
-                    const delay = (new Date(stationData.actualTime) - new Date(stationData.scheduledTime)) / 60000;
-                    if (delay > 5) penaltyFactor = 0.8;
-                }
-                const baseEarning = 100 * proximityBonus * penaltyFactor; 
-
-                if (stationData.type === 'DEPARTURE' && stationData.actualTime && !state.trainLog[trainId].departedPaid) { 
-                    state.wallet += baseEarning; earningsThisTick += baseEarning; departures++; station.departures++; state.trainLog[trainId].departedPaid = true; 
-                } 
-                if (stationData.type === 'ARRIVAL' && stationData.actualTime && !state.trainLog[trainId].arrivedPaid) { 
-                    state.wallet += baseEarning; earningsThisTick += baseEarning; arrivals++; station.arrivals++; state.trainLog[trainId].arrivedPaid = true; 
-                } 
-            } 
-            station.hourlyEarnings = earningsThisTick * 40; 
-            if (earningsThisTick > 0) { 
-                station.totalEarnings += earningsThisTick; 
-                state.profile.total_earned += earningsThisTick; 
-                if (!station.earningsLog) station.earningsLog = []; 
-                station.earningsLog.push({ timestamp: Date.now(), profit: earningsThisTick, arrivals, departures }); 
-                showNotification(`🏛️ ${stationConfig.name}: +${fmt(earningsThisTick)} VC`); updateUI(); 
-            } 
-        } catch (error) { } 
-    } 
-}
-
+async function tickTrainStations() { for (const stationCode in state.infrastructure.trainStations) { try { const station = state.infrastructure.trainStations[stationCode]; if (!station.owned) continue; const stationConfig = config.infrastructure[stationCode]; const proximityBonus = getProximityBonus(stationConfig.lat, stationConfig.lon, state.playerLocation); const trains = await fetchTrainStationData(stationConfig.apiId); if (!Array.isArray(trains)) { state.stationData[stationCode] = []; continue; } state.stationData[stationCode] = trains; let earningsThisTick = 0; let departures = 0; let arrivals = 0; for (const train of trains) { const trainId = `${train.trainNumber}-${train.departureDate}`; const stationData = train.timeTableRows.find(row => row.stationShortCode === stationConfig.apiId); if (!stationData) continue; if (!state.trainLog[trainId]) state.trainLog[trainId] = { departedPaid: false, arrivedPaid: false }; let penaltyFactor = 1.0; if (stationData.actualTime && stationData.scheduledTime) { const delay = (new Date(stationData.actualTime) - new Date(stationData.scheduledTime)) / 60000; if (delay > 5) penaltyFactor = 0.8; } const baseEarning = 100 * proximityBonus * penaltyFactor; if (stationData.type === 'DEPARTURE' && stationData.actualTime && !state.trainLog[trainId].departedPaid) { state.wallet += baseEarning; earningsThisTick += baseEarning; departures++; station.departures++; state.trainLog[trainId].departedPaid = true; } if (stationData.type === 'ARRIVAL' && stationData.actualTime && !state.trainLog[trainId].arrivedPaid) { state.wallet += baseEarning; earningsThisTick += baseEarning; arrivals++; station.arrivals++; state.trainLog[trainId].arrivedPaid = true; } } station.hourlyEarnings = earningsThisTick * 40; if (earningsThisTick > 0) { station.totalEarnings += earningsThisTick; state.profile.total_earned += earningsThisTick; if (!station.earningsLog) station.earningsLog = []; station.earningsLog.push({ timestamp: Date.now(), profit: earningsThisTick, arrivals, departures }); showNotification(`🏛️ ${stationConfig.name}: +${fmt(earningsThisTick)} VC`); updateUI(); } } catch (error) { } } }
 async function tickTfLStation(cat, base, log, icon) { for (const code in state.infrastructure[cat]) { try { const s = state.infrastructure[cat][code]; if (!s.owned) continue; const conf = config.infrastructure[code]; if (conf.apiId.startsWith('place-')) continue; const bonus = getProximityBonus(conf.lat, conf.lon, state.playerLocation); const data = await fetchTfLArrivals(conf.apiId); state.stationData[code] = { data: Array.isArray(data) ? data : [] }; let earn = 0; for (const a of (state.stationData[code].data)) { const id = a.id; if (!log[id]) { const e = base * bonus; state.wallet += e; earn += e; s.arrivals++; log[id] = { paid: true, ts: Date.now() }; } } s.hourlyEarnings = earn * 40; if (earn > 0) { s.totalEarnings += earn; state.profile.total_earned += earn; showNotification(`${icon} ${conf.name}: +${fmt(earn)} VC`); updateUI(); } } catch (e) {} } const now=Date.now(); for(const k in log) if(now-log[k].ts > 1800000) delete log[k]; }
 async function tickMbtaBusTerminals() { for (const code in state.infrastructure.busTerminals) { const conf = config.infrastructure[code]; if (!conf.apiId.startsWith('place-')) continue; try { const s = state.infrastructure.busTerminals[code]; if (!s.owned) continue; const bonus = getProximityBonus(conf.lat, conf.lon, state.playerLocation); const data = await fetchMbtaBusTerminalData(conf.apiId); state.stationData[code] = data; let earn = 0; if (data?.data) { for (const p of data.data) { const id = p.id; if (!state.busLog[id]) { const e = 25 * bonus; state.wallet += e; earn += e; s.arrivals++; state.busLog[id] = { paid: true, ts: Date.now() }; } } } s.hourlyEarnings = earn * 40; if (earn > 0) { s.totalEarnings += earn; state.profile.total_earned += earn; showNotification(`🚏 ${conf.name}: +${fmt(earn)} VC`); updateUI(); } } catch (e) {} } }
 async function tickCableCar() { try { const s = state.infrastructure.cableCar.LCC; if (!s.owned) return; const conf = config.infrastructure.LCC; const bonus = getProximityBonus(conf.lat, conf.lon, state.playerLocation); const data = await fetchCableCarStatus(conf.apiId); const active = data?.lineStatuses?.[0]?.statusSeverityDescription === 'Good Service'; if (active) { const e = 5000 * 1.5 * bonus; state.wallet += e; s.totalEarnings += e; state.profile.total_earned += e; showNotification(`🚠 ${conf.name}: +${fmt(e)} VC`); updateUI(); } s.hourlyEarnings = active ? 5000 * 60 * bonus : 0; } catch (e) {} }
