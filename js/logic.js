@@ -1,5 +1,5 @@
-// js/logic.js - WERSJA KOMPLETNA
-import { state, logTransaction, achievementsList, checkAchievements, checkLevelUp } from './state.js';
+// js/logic.js - WERSJA POPRAWIONA (USUWA KONFLIKTY)
+import { state, logTransaction, achievementsList, calculateAssetValue, checkAchievements, checkLevelUp } from './state.js'; // <- POPRAWKA JEST TUTAJ (WSZYSTKO ZE STATE)
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
@@ -125,7 +125,7 @@ export const tickAllInfrastructure = () => {
 
 // ===== FUNKCJE POMOCNICZE (LOGIKA GRY) =====
 
-export function calculateAssetValue() { // <--- TU JEST EKSPORT
+export function calculateAssetValue() {
     const fleetValue = Object.values(state.owned).reduce((sum, v) => sum + (config.basePrice[v.type] || 0), 0);
     const infraValue = Object.values(state.infrastructure).reduce((sum, category) => { return sum + Object.keys(category).reduce((catSum, key) => { return catSum + (category[key].owned ? config.infrastructure[key].price : 0); }, 0); }, 0);
     return state.wallet + fleetValue + infraValue;
@@ -172,7 +172,51 @@ export function updateRankings() {
 
 // ===== LOGIKA INFRASTRUKTURY (BEZ ZMIAN) =====
 
-async function tickTrainStations() { /* ... */ }
-async function tickTfLStation(cat, base, log, icon) { /* ... */ }
-async function tickMbtaBusTerminals() { /* ... */ }
-async function tickCableCar() { /* ... */ }
+async function tickTrainStations() { 
+    for (const stationCode in state.infrastructure.trainStations) { 
+        try { 
+            const station = state.infrastructure.trainStations[stationCode]; 
+            if (!station.owned) continue; 
+            const stationConfig = config.infrastructure[stationCode]; 
+            const proximityBonus = getProximityBonus(stationConfig.lat, stationConfig.lon, state.playerLocation); 
+            const trains = await fetchTrainStationData(stationConfig.apiId); 
+            
+            if (!Array.isArray(trains)) { state.stationData[stationCode] = []; continue; } 
+            state.stationData[stationCode] = trains; 
+            
+            let earningsThisTick = 0; let departures = 0; let arrivals = 0; 
+            for (const train of trains) { 
+                const trainId = `${train.trainNumber}-${train.departureDate}`; 
+                const stationData = train.timeTableRows.find(row => row.stationShortCode === stationConfig.apiId); 
+                if (!stationData) continue; 
+                
+                if (!state.trainLog[trainId]) state.trainLog[trainId] = { departedPaid: false, arrivedPaid: false }; 
+                let penaltyFactor = 1.0;
+                if (stationData.actualTime && stationData.scheduledTime) {
+                    const delay = (new Date(stationData.actualTime) - new Date(stationData.scheduledTime)) / 60000;
+                    if (delay > 5) penaltyFactor = 0.8;
+                }
+                const baseEarning = 100 * proximityBonus * penaltyFactor; 
+
+                if (stationData.type === 'DEPARTURE' && stationData.actualTime && !state.trainLog[trainId].departedPaid) { 
+                    state.wallet += baseEarning; earningsThisTick += baseEarning; departures++; station.departures++; state.trainLog[trainId].departedPaid = true; 
+                } 
+                if (stationData.type === 'ARRIVAL' && stationData.actualTime && !state.trainLog[trainId].arrivedPaid) { 
+                    state.wallet += baseEarning; earningsThisTick += baseEarning; arrivals++; station.arrivals++; state.trainLog[trainId].arrivedPaid = true; 
+                } 
+            } 
+            station.hourlyEarnings = earningsThisTick * 40; 
+            if (earningsThisTick > 0) { 
+                station.totalEarnings += earningsThisTick; 
+                state.profile.total_earned += earningsThisTick; 
+                if (!station.earningsLog) station.earningsLog = []; 
+                station.earningsLog.push({ timestamp: Date.now(), profit: earningsThisTick, arrivals, departures }); 
+                showNotification(`🏛️ ${stationConfig.name}: +${fmt(earningsThisTick)} VC`); updateUI(); 
+            } 
+        } catch (error) { } 
+    } 
+}
+
+async function tickTfLStation(cat, base, log, icon) { for (const code in state.infrastructure[cat]) { try { const s = state.infrastructure[cat][code]; if (!s.owned) continue; const conf = config.infrastructure[code]; if (conf.apiId.startsWith('place-')) continue; const bonus = getProximityBonus(conf.lat, conf.lon, state.playerLocation); const data = await fetchTfLArrivals(conf.apiId); state.stationData[code] = { data: Array.isArray(data) ? data : [] }; let earn = 0; for (const a of (state.stationData[code].data)) { const id = a.id; if (!log[id]) { const e = base * bonus; state.wallet += e; earn += e; s.arrivals++; log[id] = { paid: true, ts: Date.now() }; } } s.hourlyEarnings = earn * 40; if (earn > 0) { s.totalEarnings += earn; state.profile.total_earned += earn; showNotification(`${icon} ${conf.name}: +${fmt(earn)} VC`); updateUI(); } } catch (e) {} } const now=Date.now(); for(const k in log) if(now-log[k].ts > 1800000) delete log[k]; }
+async function tickMbtaBusTerminals() { for (const code in state.infrastructure.busTerminals) { const conf = config.infrastructure[code]; if (!conf.apiId.startsWith('place-')) continue; try { const s = state.infrastructure.busTerminals[code]; if (!s.owned) continue; const bonus = getProximityBonus(conf.lat, conf.lon, state.playerLocation); const data = await fetchMbtaBusTerminalData(conf.apiId); state.stationData[code] = data; let earn = 0; if (data?.data) { for (const p of data.data) { const id = p.id; if (!state.busLog[id]) { const e = 25 * bonus; state.wallet += e; earn += e; s.arrivals++; state.busLog[id] = { paid: true, ts: Date.now() }; } } } s.hourlyEarnings = earn * 40; if (earn > 0) { s.totalEarnings += earn; state.profile.total_earned += earn; showNotification(`🚏 ${conf.name}: +${fmt(earn)} VC`); updateUI(); } } catch (e) {} } }
+async function tickCableCar() { try { const s = state.infrastructure.cableCar.LCC; if (!s.owned) return; const conf = config.infrastructure.LCC; const bonus = getProximityBonus(conf.lat, conf.lon, state.playerLocation); const data = await fetchCableCarStatus(conf.apiId); const active = data?.lineStatuses?.[0]?.statusSeverityDescription === 'Good Service'; if (active) { const e = 5000 * 1.5 * bonus; state.wallet += e; s.totalEarnings += e; state.profile.total_earned += e; showNotification(`🚠 ${conf.name}: +${fmt(e)} VC`); updateUI(); } s.hourlyEarnings = active ? 5000 * 60 * bonus : 0; } catch (e) {} }
