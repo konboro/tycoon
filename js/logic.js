@@ -1,5 +1,5 @@
-// js/logic.js - WERSJA POPRAWIONA (USUWA KONFLIKTY)
-import { state, logTransaction, achievementsList, calculateAssetValue, checkAchievements, checkLevelUp } from './state.js'; // <- POPRAWKA JEST TUTAJ (WSZYSTKO ZE STATE)
+// js/logic.js - WERSJA POPRAWIONA (USUWA DUPLIKATY FUNKCJI)
+import { state, logTransaction, achievementsList, checkAchievements, checkLevelUp } from './state.js';
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
@@ -168,6 +168,27 @@ export function updateRankings() {
     }; 
     state.rankings.assetValue = updateList(state.rankings.assetValue, 'assetValue'); 
     state.rankings.weeklyEarnings = updateList(state.rankings.weeklyEarnings, 'weeklyEarnings'); 
+}
+
+// ===== DEFINICJE FUNKCJI (ZAMIAST IMPORTU) =====
+
+export function checkAchievements() { 
+    for (const key in achievementsList) { 
+        if (!state.achievements[key] && achievementsList[key].check()) { 
+            state.achievements[key] = { unlocked: true, claimed: false, date: new Date().toISOString() }; 
+            showNotification(`🏆 Osiągnięcie: ${achievementsList[key].title}`);
+        } 
+    } 
+    updateUI(); 
+}
+
+export function checkLevelUp() { 
+    function xpNeededForLevel(level) { return 100 + (level - 1) * 50; } 
+    while (state.profile.xp >= xpNeededForLevel(state.profile.level)) { 
+        state.profile.xp -= xpNeededForLevel(state.profile.level); 
+        state.profile.level++; 
+        showNotification(`⭐ Awans na poziom ${state.profile.level}!`);
+    } 
 }
 
 // ===== LOGIKA INFRASTRUKTURY (BEZ ZMIAN) =====
