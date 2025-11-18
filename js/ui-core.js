@@ -1,39 +1,17 @@
+// js/ui-core.js - WERSJA KOMPLETNA
 import { state } from './state.js';
 import { config } from './config.js';
 import { map } from './state.js';
 import { $, fmt, getProximityBonus, createIcon, getIconHtml, ICONS, getWeatherIcon } from './utils.js';
-import { calculateAssetValue } from './state.js'; // POPRAWKA: Teraz import ze state.js
+import { calculateAssetValue } from './logic.js'; // Importujemy kalkulację wartości z logic.js
 
+// Importujemy "Malarzy"
 import { 
     renderVehicleList, renderInfrastructure, renderLootboxTab, renderMarket, 
     renderRankings, renderCharts, renderAchievements, renderEnergyPrices, 
     renderTransactionHistory, renderGuildTab, renderCompanyTab, renderFriendsTab, 
     renderStationDetails, renderVehicleCard, renderEmptyState, renderSectionTitle
 } from './renderers.js';
-
-// ... (Reszta funkcji: toggleContentPanel, getCompanyInfoPopupContent, showPlayerLocation, updatePlayerMarkerIcon, redrawMap, updateUI, render) ...
-// Skopiuj resztę funkcji z poprzedniej wersji pliku ui-core.js, one się nie zmieniają, ważny był tylko import na górze.
-
-// Dla pewności wklejam skrót kluczowej funkcji render(), resztę weź z historii lub poprzedniej wiadomości
-export function render() {
-    const listContainer = $('mainList');
-    if(!listContainer) return;
-    listContainer.innerHTML = '';
-    const titleEl = $('panel-title'); if(titleEl) titleEl.textContent = state.activeTab;
-    
-    const controls = $('panel-controls');
-    const showControls = ['store', 'fleet', 'stations', 'market'].includes(state.activeTab);
-    if(controls) controls.style.display = showControls ? 'block' : 'none';
-    
-    // ... (obsługa filtrów i switch tabów) ...
-    // Upewnij się, że masz tu switch z renderVehicleList itp.
-    // ...
-    
-    if (state.selectedVehicleKey) { renderVehicleCard(state.selectedVehicleKey); } 
-    else { const vc=$('vehicle-card'); if(vc) vc.classList.add('translate-y-full'); }
-    redrawMap();
-}
-// KONIECZNIE WKLEJ TU CAŁĄ RESZTĘ KODU Z POPRZEDNIEGO ui-core.js (funkcje redrawMap, updateUI itd.)
 
 // ===== 1. FUNKCJE POMOCNICZE UI =====
 
@@ -59,7 +37,7 @@ function getCompanyInfoPopupContent() {
     Object.values(state.infrastructure).forEach(category => {
         Object.values(category).forEach(item => { if (item.owned) buildingCount++; });
     });
-    const companyValue = calculateAssetValue(); // Używamy funkcji z logic.js
+    const companyValue = calculateAssetValue(); 
     return `<div style="font-family: 'Inter', sans-serif;"><h3 style="margin: 0; font-size: 16px; font-weight: bold;">${companyName}</h3><ul style="list-style: none; padding: 0; margin: 8px 0 0 0; font-size: 14px;"><li style="margin-bottom: 4px;"><strong>Pojazdy:</strong> ${vehicleCount}</li><li style="margin-bottom: 4px;"><strong>Budynki:</strong> ${buildingCount}</li><li><strong>Wartość firmy:</strong> ${fmt(companyValue)} VC</li></ul></div>`;
 }
 
@@ -88,19 +66,15 @@ export function showPlayerLocation() {
                 state.proximityCircle.setLatLng([latitude, longitude]);
             } else {
                 state.proximityCircle = L.circle([latitude, longitude], {
-                    radius: 100000, // 100km
+                    radius: 100000, 
                     color: 'green',
                     fillColor: '#22c55e',
                     fillOpacity: 0.15,
                     weight: 1
                 }).addTo(map);
             }
-        }, (error) => {
-            console.warn("Nie można uzyskać lokalizacji:", error.message);
-        }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
-    } else {
-        console.warn("Geolokalizacja nie jest wspierana.");
-    }
+        }, (error) => { console.warn("Nie można uzyskać lokalizacji:", error.message); }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+    } else { console.warn("Geolokalizacja nie jest wspierana."); }
 }
 
 export function updatePlayerMarkerIcon() {
@@ -114,6 +88,8 @@ export function updatePlayerMarkerIcon() {
         state.playerMarker.setIcon(playerIcon);
     }
 }
+
+// ===== 2. RYSOWANIE MAPY =====
 
 export function redrawMap() {
     const visibleKeys = new Set();
@@ -242,7 +218,6 @@ export function updateUI(inM, outM) {
     const buildingCount = Object.values(state.infrastructure).reduce((sum, category) => sum + Object.values(category).filter(item => item.owned).length, 0);
     setTxt('owned-buildings-count', buildingCount);
     
-    // Obliczanie wartości musi być w UI-core, bo jest potrzebne w updateUI
     const estimatedAssets = Math.max(0, calculateAssetValue() - state.wallet); 
     setTxt('estimated-assets', fmt(estimatedAssets));
     
@@ -268,7 +243,7 @@ export function updateUI(inM, outM) {
     }
 }
 
-// ===== 4. GŁÓWNY RENDERER =====
+// ===== 4. GŁÓWNY RENDERER (TERAZ JEST POPRAWNY) =====
 
 const panelTitles = { stations: "Infrastruktura", store: "Sklep", fleet: "Moja Flota", market: "Giełda", lootbox: "Skrzynki", achievements: "Osiągnięcia", stats: "Statystyki", friends: "Znajomi", rankings: "Ranking", energy: "Ceny Energii", guild: "Gildia", transactions: "Historia Transakcji", company: "Personalizacja Firmy" };
 
