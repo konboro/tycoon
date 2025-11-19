@@ -1,4 +1,4 @@
-import { state, logTransaction, achievementsList, checkAchievements, checkLevelUp } from './state.js';
+import { state, logTransaction, achievementsList } from './state.js';
 import { config } from './config.js';
 import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
 import { updateUI, render } from './ui-core.js';
@@ -85,8 +85,8 @@ export function tickEconomy() {
     state.profile.earnings_history.push(currentTickEarnings);
     if(state.profile.earnings_history.length > 60) state.profile.earnings_history.shift();
     
-    checkAchievements();
-    checkLevelUp();
+    //checkAchievements();
+    //checkLevelUp();
     updateUI(inMin, outMin);
 }
 

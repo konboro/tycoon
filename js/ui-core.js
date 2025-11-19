@@ -205,6 +205,7 @@ export function redrawMap() {
 
 export function updateUI(inM, outM) {
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
     set('wallet', fmt(state.wallet));
     set('company-name', state.profile.companyName);
     set('level', state.profile.level);

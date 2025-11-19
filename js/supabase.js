@@ -87,8 +87,9 @@ export async function loadProfileFromSupabase(userId) {
         }
 
         // 4. GILDIA - Wczytywanie i Offline Zarobek
-        const { data: guildMember } = await supabase.from('guild_members').select('guild_id').eq('user_id', userId).single();
-        
+        //const { data: guildMember } = await supabase.from('guild_members').select('guild_id').eq('user_id', userId).single();
+        const { data: guildMember, error: guildError } = await supabase.from('guild_members').select('guild_id').eq('user_id', userId).maybeSingle();
+
         if (guildMember) {
             const guildId = guildMember.guild_id;
             const { data: guildData } = await supabase.from('guilds').select('*').eq('id', guildId).single();

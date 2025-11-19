@@ -1,6 +1,9 @@
 import { state, map } from './state.js';
 import { $ } from './utils.js';
-import { fetchPlanes, fetchBUS, fetchTUBE, fetchFI, fetchEnergyPrices, fetchGlobalTakenVehicles, updateVehiclesWithWeather } from './api.js';
+//import { fetchPlanes, fetchBUS, fetchTUBE, fetchFI, fetchEnergyPrices, fetchGlobalTakenVehicles, updateVehiclesWithWeather } from './api.js';
+
+import { fetchAllVehicles, fetchEnergyPrices, fetchGlobalTakenVehicles, forceRefreshVehicles, autoRefreshIfNeeded, getApiStatus } from './api-server.js';
+import { updateVehiclesWithWeather } from './api.js';
 
 import { 
     tickEconomy, 
@@ -59,18 +62,24 @@ async function init() {
   setupEventListeners();
   showPlayerLocation();
   
-  try {
-      await Promise.all([fetchPlanes(), fetchBUS(), fetchTUBE(), fetchFI(), fetchEnergyPrices()]);
-  } catch (e) { console.warn("API Error:", e); }
+try {
+    await fetchAllVehicles();
+    await fetchEnergyPrices();
+    console.log("✅ Loaded vehicle data from server cache");
+} catch (e) { 
+    console.warn("Server API Error:", e); 
+}
 
   await fetchGlobalTakenVehicles();
   
-  setInterval(() => {
-      fetchPlanes(); fetchBUS(); fetchTUBE(); fetchFI();
-      updateVehiclesWithWeather(state.vehicles.plane);
-      fetchGlobalTakenVehicles();
-      render();
-  }, 60000); 
+    // Update the periodic refresh:
+    setInterval(async () => {
+        console.log("⏰ Auto-refresh check...");
+        await autoRefreshIfNeeded();
+        await fetchGlobalTakenVehicles();
+        updateVehiclesWithWeather(state.vehicles.plane);
+        render();
+    }, 5 * 60 * 1000); // 5 minutes instead of 1 minute
 
   setInterval(tickEconomy, 60000);
   setInterval(tickGuilds, 60000);
