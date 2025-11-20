@@ -1,4 +1,10 @@
 // js/utils.js - WERSJA KOMPLETNA Z getIconHtml
+import { 
+    ICONS as ASSET_ICONS, 
+    getIconHtml as getIconHtmlFromAssets, 
+    getVehicleRarity as getVehicleRarityFromAssets 
+} from './assets.js';
+
 export const $ = id => document.getElementById(id);
 export const fmt = n => Math.round(n).toLocaleString('pl-PL');
 
@@ -17,38 +23,43 @@ export function getWeatherIcon(code) {
     return 'ri-temp-hot-line'; 
 }
 
-// --- KONFIGURACJA IKON (Assets + Emotki) ---
-export const ICONS = { 
-    plane: 'assets/plane.png', 
-    bus: 'assets/bus.png', 
-    train: 'assets/train.png', 
-    tube: 'assets/tube.png', 
-    tram: 'assets/tram.png',
-    bike: '🚲', 
-    'river-bus': 'assets/ship.png', 
-    
-    // Ikony infrastruktury
-    station_train: 'assets/station.png',
-    station_tube: 'assets/station_small.png',
-    station_bus: '🚏',
-    station_cable: '🚠', 
-    'station_river-bus': '⚓', 
-    'asset_power-plant': '⚡️' 
-};
 
-// --- TO JEST FUNKCJA, KTÓREJ BRAKOWAŁO ---
-export function getIconHtml(type, sizeClass = "w-full h-full") {
-    const src = ICONS[type] || '❓';
+export const ICONS = ASSET_ICONS;
+export const getIconHtml = getIconHtmlFromAssets;
+export const getVehicleRarity = getVehicleRarityFromAssets;
+
+// --- KONFIGURACJA IKON (Assets + Emotki) ---
+// export const ICONS = { 
+//     plane: 'assets/plane.png', 
+//     bus: 'assets/bus.png', 
+//     train: 'assets/train.png', 
+//     tube: 'assets/tube.png', 
+//     tram: 'assets/tram.png',
+//     bike: '🚲', 
+//     'river-bus': 'assets/ship.png', 
     
-    // Jeśli ścieżka zawiera kropkę (np. .png) lub ukośnik (/), traktujemy to jak obrazek
-    if (src.includes('.') || src.includes('/')) {
-        // Dodajemy onerror, żeby w razie braku pliku pokazał się chociaż znak zapytania
-        return `<img src="${src}" class="${sizeClass} object-contain drop-shadow-md" onerror="this.style.display='none';this.parentNode.innerHTML='❓'">`;
-    }
+//     // Ikony infrastruktury
+//     station_train: 'assets/station.png',
+//     station_tube: 'assets/station_small.png',
+//     station_bus: '🚏',
+//     station_cable: '🚠', 
+//     'station_river-bus': '⚓', 
+//     'asset_power-plant': '⚡️' 
+// };
+
+// // --- TO JEST FUNKCJA, KTÓREJ BRAKOWAŁO ---
+// export function getIconHtml(type, sizeClass = "w-full h-full") {
+//     const src = ICONS[type] || '❓';
     
-    // W przeciwnym razie to emotka (tekst)
-    return `<div class="flex items-center justify-center ${sizeClass} text-3xl">${src}</div>`;
-}
+//     // Jeśli ścieżka zawiera kropkę (np. .png) lub ukośnik (/), traktujemy to jak obrazek
+//     if (src.includes('.') || src.includes('/')) {
+//         // Dodajemy onerror, żeby w razie braku pliku pokazał się chociaż znak zapytania
+//         return `<img src="${src}" class="${sizeClass} object-contain drop-shadow-md" onerror="this.style.display='none';this.parentNode.innerHTML='❓'">`;
+//     }
+    
+//     // W przeciwnym razie to emotka (tekst)
+//     return `<div class="flex items-center justify-center ${sizeClass} text-3xl">${src}</div>`;
+// }
 
 export function createIcon(isOwnedAndMoving) { 
     return L.divIcon({ 
@@ -82,16 +93,16 @@ export function showConfirm(message, onConfirm) {
     modal.style.display = 'flex'; 
 }
 
-export function getVehicleRarity(vehicle) {
-    if (!vehicle || !vehicle.type) return 'common';
-    const nameToCheck = (vehicle.title || vehicle.customName || '').toLowerCase();
-    switch (vehicle.type) {
-        case 'bike': case 'bus': return 'common';
-        case 'train': case 'tube': if (nameToCheck.includes('victoria')) return 'legendary'; if (nameToCheck.includes('jubilee') || nameToCheck.includes('piccadilly')) return 'epic'; return 'rare';
-        case 'ship': return 'epic'; case 'plane': return 'legendary'; case 'river-bus': return 'rare'; case 'tram': return 'rare';
-        default: return 'common';
-    }
-}
+// export function getVehicleRarity(vehicle) {
+//     if (!vehicle || !vehicle.type) return 'common';
+//     const nameToCheck = (vehicle.title || vehicle.customName || '').toLowerCase();
+//     switch (vehicle.type) {
+//         case 'bike': case 'bus': return 'common';
+//         case 'train': case 'tube': if (nameToCheck.includes('victoria')) return 'legendary'; if (nameToCheck.includes('jubilee') || nameToCheck.includes('piccadilly')) return 'epic'; return 'rare';
+//         case 'ship': return 'epic'; case 'plane': return 'legendary'; case 'river-bus': return 'rare'; case 'tram': return 'rare';
+//         default: return 'common';
+//     }
+// }
 
 export function getProximityBonus(lat, lon, playerLocation) {
     if (!playerLocation || lat == null || lon == null || !isFinite(lat) || !isFinite(lon)) return 1.0;

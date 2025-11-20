@@ -1,6 +1,7 @@
-import { state, logTransaction, achievementsList } from './state.js';
+import { state, logTransaction, checkAchievements, checkLevelUp, achievementManager } from './state.js';
 import { config } from './config.js';
-import { hav, $, showNotification, fmt, getProximityBonus } from './utils.js';
+import { hav, $, fmt, getProximityBonus } from './utils.js';
+import { showNotification } from './notifications.js';
 import { updateUI, render } from './ui-core.js';
 import { fetchTrainStationData, fetchTfLArrivals, fetchMbtaBusTerminalData, fetchCableCarStatus } from './api.js';
 import { supabase } from './supabase.js';
@@ -85,8 +86,8 @@ export function tickEconomy() {
     state.profile.earnings_history.push(currentTickEarnings);
     if(state.profile.earnings_history.length > 60) state.profile.earnings_history.shift();
     
-    //checkAchievements();
-    //checkLevelUp();
+    checkAchievements();
+    checkLevelUp();
     updateUI(inMin, outMin);
 }
 
@@ -168,6 +169,54 @@ export function updateRankings() {
     state.rankings.assetValue = updateList(state.rankings.assetValue, 'assetValue'); 
     state.rankings.weeklyEarnings = updateList(state.rankings.weeklyEarnings, 'weeklyEarnings'); 
 }
+
+// Function to handle vehicle upgrades with achievement checking
+export function upgradeVehicle(vehicleKey) {
+    const ownedData = state.owned[vehicleKey];
+    if (!ownedData || (ownedData.level || 1) >= 5) return false;
+    
+    const nextLevelIndex = ownedData.level || 1;
+    const cost = config.upgrade.costs[nextLevelIndex];
+    
+    if (state.wallet >= cost) {
+        state.wallet -= cost;
+        logTransaction(-cost, `Ulepszenie: ${ownedData.customName || ownedData.title}`);
+        ownedData.level = (ownedData.level || 1) + 1;
+        state.profile.upgrades_done++;
+        
+        // Check achievements after upgrade
+        checkAchievements();
+        
+        return true;
+    }
+    
+    return false;
+}
+
+
+// Function to handle vehicle service with achievement checking  
+export function serviceVehicle(vehicleKey) {
+    const ownedData = state.owned[vehicleKey];
+    if (!ownedData) return false;
+    
+    const cost = Math.round((ownedData.wear || 0) * (config.basePrice[ownedData.type] / 200));
+    
+    if (state.wallet >= cost && (ownedData.wear || 0) > 0) {
+        state.wallet -= cost;
+        logTransaction(-cost, `Serwis: ${ownedData.customName || ownedData.title}`);
+        ownedData.wear = 0;
+        state.profile.services_done++;
+        
+        // Check achievements after service
+        checkAchievements();
+        
+        return true;
+    }
+    
+    return false;
+}
+
+
 
 // ===== LOGIKA INFRASTRUKTURY (BEZ ZMIAN) =====
 
