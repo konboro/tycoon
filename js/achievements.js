@@ -12,6 +12,14 @@ export const ACHIEVEMENT_CATEGORIES = {
     SPECIAL: 'special'
 };
 
+// Achievement reward types
+export const REWARD_TYPES = {
+    CURRENCY: 'currency',
+    EXPERIENCE: 'experience', 
+    LOOTBOX: 'lootbox',
+    MIXED: 'mixed'
+};
+
 // Main achievements registry
 export const ACHIEVEMENTS = {
     // ===== FLEET ACHIEVEMENTS =====
@@ -22,6 +30,7 @@ export const ACHIEVEMENTS = {
         description: "Kup swój pierwszy pojazd.",
         icon: '🚗',
         reward: { vc: 1000, xp: 50 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => Object.keys(state.owned).length >= 1,
         progress: (state) => ({ current: Object.keys(state.owned).length, target: 1 }),
         hidden: false,
@@ -34,7 +43,8 @@ export const ACHIEVEMENTS = {
         title: "Mała flota",
         description: "Posiadaj 10 pojazdów.",
         icon: '🚙',
-        reward: { vc: 5000, xp: 200 },
+        reward: { lootbox: 'common', quantity: 1 },
+        rewardType: REWARD_TYPES.LOOTBOX,
         check: (state) => Object.keys(state.owned).length >= 10,
         progress: (state) => ({ current: Object.keys(state.owned).length, target: 10 }),
         hidden: false,
@@ -47,7 +57,8 @@ export const ACHIEVEMENTS = {
         title: "Rosnąca flota",
         description: "Posiadaj 25 pojazdów.",
         icon: '🚛',
-        reward: { vc: 15000, xp: 500 },
+        reward: { vc: 50000, xp: 500, lootbox: 'rare', quantity: 1 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => Object.keys(state.owned).length >= 25,
         progress: (state) => ({ current: Object.keys(state.owned).length, target: 25 }),
         hidden: false,
@@ -60,7 +71,8 @@ export const ACHIEVEMENTS = {
         title: "Prawdziwy Magnat",
         description: "Posiadaj 50 pojazdów.",
         icon: '🏆',
-        reward: { vc: 25000, xp: 1000 },
+        reward: { lootbox: 'epic', quantity: 2 },
+        rewardType: REWARD_TYPES.LOOTBOX,
         check: (state) => Object.keys(state.owned).length >= 50,
         progress: (state) => ({ current: Object.keys(state.owned).length, target: 50 }),
         hidden: false,
@@ -73,7 +85,8 @@ export const ACHIEVEMENTS = {
         title: "Imperium Transportowe",
         description: "Posiadaj 100 pojazdów.",
         icon: '👑',
-        reward: { vc: 100000, xp: 5000 },
+        reward: { lootbox: 'epic', quantity: 3, vc: 500000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => Object.keys(state.owned).length >= 100,
         progress: (state) => ({ current: Object.keys(state.owned).length, target: 100 }),
         hidden: false,
@@ -88,6 +101,7 @@ export const ACHIEVEMENTS = {
         description: "Zarób łącznie 100,000 VC.",
         icon: '💰',
         reward: { vc: 10000, xp: 500 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.total_earned >= 100000,
         progress: (state) => ({ current: state.profile.total_earned, target: 100000 }),
         hidden: false,
@@ -100,7 +114,8 @@ export const ACHIEVEMENTS = {
         title: "Pierwszy Milion",
         description: "Zarób łącznie 1,000,000 VC.",
         icon: '💎',
-        reward: { vc: 100000, xp: 2500 },
+        reward: { lootbox: 'rare', quantity: 2, xp: 2500 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.total_earned >= 1000000,
         progress: (state) => ({ current: state.profile.total_earned, target: 1000000 }),
         hidden: false,
@@ -113,7 +128,8 @@ export const ACHIEVEMENTS = {
         title: "Klub 10 Milionów",
         description: "Zarób łącznie 10,000,000 VC.",
         icon: '🌟',
-        reward: { vc: 1000000, xp: 10000 },
+        reward: { lootbox: 'epic', quantity: 1, vc: 1000000, xp: 10000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.total_earned >= 10000000,
         progress: (state) => ({ current: state.profile.total_earned, target: 10000000 }),
         hidden: false,
@@ -127,7 +143,8 @@ export const ACHIEVEMENTS = {
         title: "Baron Kolejowy",
         description: "Kup swój pierwszy dworzec.",
         icon: '🏛️',
-        reward: { vc: 750000, xp: 7500 },
+        reward: { vc: 750000, xp: 7500, lootbox: 'train_pack', quantity: 1 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => {
             return Object.values(state.infrastructure.trainStations).some(station => station.owned) ||
                    Object.values(state.infrastructure.tubeStations).some(station => station.owned) ||
@@ -151,7 +168,8 @@ export const ACHIEVEMENTS = {
         title: "Władca Finlandii",
         description: "Posiadaj oba dworce w Finlandii.",
         icon: '🇫🇮',
-        reward: { vc: 2500000, xp: 10000 },
+        reward: { lootbox: 'train_pack', quantity: 3, vc: 2500000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => {
             return state.infrastructure.trainStations.HKI?.owned && 
                    state.infrastructure.trainStations.TPE?.owned;
@@ -173,7 +191,8 @@ export const ACHIEVEMENTS = {
         title: "Potentat Infrastruktury",
         description: "Posiadaj 5 różnych stacji/budynków.",
         icon: '🏗️',
-        reward: { vc: 5000000, xp: 15000 },
+        reward: { lootbox: 'epic', quantity: 2, xp: 15000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => {
             const totalOwned = Object.values(state.infrastructure).reduce((sum, category) => {
                 return sum + Object.values(category).filter(item => item.owned).length;
@@ -197,7 +216,8 @@ export const ACHIEVEMENTS = {
         title: "Weteran",
         description: "Osiągnij 5 poziom.",
         icon: '⭐',
-        reward: { vc: 10000, xp: 0 },
+        reward: { lootbox: 'common', quantity: 2, vc: 10000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.level >= 5,
         progress: (state) => ({ current: state.profile.level, target: 5 }),
         hidden: false,
@@ -210,7 +230,8 @@ export const ACHIEVEMENTS = {
         title: "Doświadczony Menedżer",
         description: "Osiągnij 10 poziom.",
         icon: '🌟',
-        reward: { vc: 50000, xp: 0 },
+        reward: { lootbox: 'rare', quantity: 2 },
+        rewardType: REWARD_TYPES.LOOTBOX,
         check: (state) => state.profile.level >= 10,
         progress: (state) => ({ current: state.profile.level, target: 10 }),
         hidden: false,
@@ -223,7 +244,8 @@ export const ACHIEVEMENTS = {
         title: "Mistrz Wykonawczy",
         description: "Osiągnij 20 poziom.",
         icon: '💼',
-        reward: { vc: 200000, xp: 0 },
+        reward: { lootbox: 'epic', quantity: 1, vc: 200000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.level >= 20,
         progress: (state) => ({ current: state.profile.level, target: 20 }),
         hidden: false,
@@ -238,6 +260,7 @@ export const ACHIEVEMENTS = {
         description: "Przejedź łącznie 1000 km.",
         icon: '🛣️',
         reward: { vc: 10000, xp: 250 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.km_total >= 1000,
         progress: (state) => ({ current: state.profile.km_total, target: 1000 }),
         hidden: false,
@@ -250,7 +273,8 @@ export const ACHIEVEMENTS = {
         title: "Dalekobieżny",
         description: "Przejedź łącznie 10,000 km.",
         icon: '🌍',
-        reward: { vc: 50000, xp: 1000 },
+        reward: { lootbox: 'rare', quantity: 1, vc: 50000, xp: 1000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.km_total >= 10000,
         progress: (state) => ({ current: state.profile.km_total, target: 10000 }),
         hidden: false,
@@ -264,6 +288,7 @@ export const ACHIEVEMENTS = {
         description: "Serwisuj pojazdy 10 razy.",
         icon: '🔧',
         reward: { vc: 5000, xp: 100 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.services_done >= 10,
         progress: (state) => ({ current: state.profile.services_done, target: 10 }),
         hidden: false,
@@ -276,7 +301,8 @@ export const ACHIEVEMENTS = {
         title: "Mistrz Mechanik",
         description: "Serwisuj pojazdy 50 razy.",
         icon: '⚙️',
-        reward: { vc: 25000, xp: 500 },
+        reward: { lootbox: 'common', quantity: 3, vc: 25000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.services_done >= 50,
         progress: (state) => ({ current: state.profile.services_done, target: 50 }),
         hidden: false,
@@ -290,6 +316,7 @@ export const ACHIEVEMENTS = {
         description: "Ulepsz dowolny pojazd.",
         icon: '⬆️',
         reward: { vc: 10000, xp: 200 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => state.profile.upgrades_done >= 1,
         progress: (state) => ({ current: state.profile.upgrades_done, target: 1 }),
         hidden: false,
@@ -302,7 +329,8 @@ export const ACHIEVEMENTS = {
         title: "Maksymalna moc",
         description: "Ulepsz dowolny pojazd do maksymalnego poziomu.",
         icon: '🚀',
-        reward: { vc: 100000, xp: 2000 },
+        reward: { lootbox: 'epic', quantity: 1, vc: 100000, xp: 2000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => Object.values(state.owned).some(v => (v.level || 1) >= 5),
         progress: (state) => {
             const maxLevel = Math.max(0, ...Object.values(state.owned).map(v => v.level || 1));
@@ -319,7 +347,8 @@ export const ACHIEVEMENTS = {
         title: "Założyciel Gildii",
         description: "Załóż własną gildię.",
         icon: '🏛️',
-        reward: { vc: 500000, xp: 5000 },
+        reward: { vc: 500000, xp: 5000, lootbox: 'rare', quantity: 1 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => {
             const guild = state.guild.guilds[state.guild.playerGuildId];
             return guild && guild.leader === state.profile.companyName;
@@ -338,7 +367,8 @@ export const ACHIEVEMENTS = {
         title: "Towarzyski Motyl",
         description: "Dodaj 10 znajomych.",
         icon: '👥',
-        reward: { vc: 25000, xp: 500 },
+        reward: { lootbox: 'common', quantity: 1, vc: 25000, xp: 500 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => (state.profile.friends || []).length >= 10,
         progress: (state) => ({ current: (state.profile.friends || []).length, target: 10 }),
         hidden: false,
@@ -352,7 +382,8 @@ export const ACHIEVEMENTS = {
         title: "Wczesny Ptak",
         description: "Zagraj o 5:00 rano.",
         icon: '🌅',
-        reward: { vc: 50000, xp: 1000 },
+        reward: { lootbox: 'rare', quantity: 1, vc: 50000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => {
             const hour = new Date().getHours();
             return hour === 5;
@@ -368,7 +399,8 @@ export const ACHIEVEMENTS = {
         title: "Nocny Marek",
         description: "Zagraj o 2:00 w nocy.",
         icon: '🦉',
-        reward: { vc: 50000, xp: 1000 },
+        reward: { lootbox: 'rare', quantity: 1, vc: 50000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => {
             const hour = new Date().getHours();
             return hour === 2;
@@ -384,7 +416,8 @@ export const ACHIEVEMENTS = {
         title: "Szczęśliwa Siódemka",
         description: "Posiadaj dokładnie 7 pojazdów.",
         icon: '🍀',
-        reward: { vc: 77777, xp: 777 },
+        reward: { lootbox: 'epic', quantity: 1, vc: 77777, xp: 777 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => Object.keys(state.owned).length === 7,
         progress: (state) => ({ current: Object.keys(state.owned).length, target: 7 }),
         hidden: true,
@@ -397,7 +430,8 @@ export const ACHIEVEMENTS = {
         title: "Perfekcjonista",
         description: "Posiadaj pojazdy wszystkich typów.",
         icon: '✨',
-        reward: { vc: 500000, xp: 5000 },
+        reward: { lootbox: 'epic', quantity: 2, vc: 500000, xp: 5000 },
+        rewardType: REWARD_TYPES.MIXED,
         check: (state) => {
             const requiredTypes = ['plane', 'train', 'tube', 'bus', 'bike', 'river-bus', 'tram'];
             const ownedTypes = new Set(Object.values(state.owned).map(v => v.type));
@@ -409,6 +443,35 @@ export const ACHIEVEMENTS = {
             const current = requiredTypes.filter(type => ownedTypes.has(type)).length;
             return { current, target: requiredTypes.length };
         },
+        hidden: false,
+        oneTime: true
+    },
+
+    // ===== NEW LOOTBOX-FOCUSED ACHIEVEMENTS =====
+    LOOTBOX_OPENER: {
+        id: 'LOOTBOX_OPENER',
+        category: ACHIEVEMENT_CATEGORIES.SPECIAL,
+        title: "Kolekcjoner Skrzynek",
+        description: "Otwórz 10 skrzynek.",
+        icon: '📦',
+        reward: { lootbox: 'rare', quantity: 1 },
+        rewardType: REWARD_TYPES.LOOTBOX,
+        check: (state) => (state.profile.lootboxes_opened || 0) >= 10,
+        progress: (state) => ({ current: (state.profile.lootboxes_opened || 0), target: 10 }),
+        hidden: false,
+        oneTime: true
+    },
+
+    LOOTBOX_ADDICT: {
+        id: 'LOOTBOX_ADDICT',
+        category: ACHIEVEMENT_CATEGORIES.SPECIAL,
+        title: "Uzależniony od Skrzynek",
+        description: "Otwórz 100 skrzynek.",
+        icon: '🎁',
+        reward: { lootbox: 'epic', quantity: 3 },
+        rewardType: REWARD_TYPES.LOOTBOX,
+        check: (state) => (state.profile.lootboxes_opened || 0) >= 100,
+        progress: (state) => ({ current: (state.profile.lootboxes_opened || 0), target: 100 }),
         hidden: false,
         oneTime: true
     }
@@ -485,15 +548,102 @@ export class AchievementManager {
             return false;
         }
 
-        // Grant rewards
-        this.state.wallet += achievement.reward.vc;
-        this.state.profile.xp += achievement.reward.xp;
+        const rewards = {
+            vc: 0,
+            xp: 0,
+            lootboxes: []
+        };
+
+        // Grant VC rewards
+        if (achievement.reward.vc) {
+            this.state.wallet += achievement.reward.vc;
+            rewards.vc = achievement.reward.vc;
+        }
+
+        // Grant XP rewards
+        if (achievement.reward.xp) {
+            this.state.profile.xp += achievement.reward.xp;
+            rewards.xp = achievement.reward.xp;
+        }
+
+        // Grant lootbox rewards
+        if (achievement.reward.lootbox) {
+            const lootboxType = achievement.reward.lootbox;
+            const quantity = achievement.reward.quantity || 1;
+            
+            // Add lootboxes to player's inventory or immediately grant them
+            for (let i = 0; i < quantity; i++) {
+                rewards.lootboxes.push(lootboxType);
+                
+                // You can either:
+                // 1. Add to inventory: this.state.lootboxInventory.push(lootboxType);
+                // 2. Auto-open them: this.openLootbox(lootboxType);
+                // 3. Show special modal for claiming
+                
+                // For now, let's add them to a pending lootbox queue
+                if (!this.state.pendingLootboxes) this.state.pendingLootboxes = [];
+                this.state.pendingLootboxes.push({
+                    type: lootboxType,
+                    fromAchievement: achievementId,
+                    claimedAt: new Date().toISOString()
+                });
+            }
+        }
         
         // Mark as claimed
         status.claimed = true;
         status.claimedAt = new Date().toISOString();
+        status.rewards = rewards;
 
-        return true;
+        return rewards;
+    }
+
+    // New method to get pending lootboxes from achievements
+    getPendingLootboxes() {
+        return this.state.pendingLootboxes || [];
+    }
+
+    // New method to clear a pending lootbox (after opening)
+    clearPendingLootbox(index) {
+        if (this.state.pendingLootboxes && this.state.pendingLootboxes[index]) {
+            this.state.pendingLootboxes.splice(index, 1);
+        }
+    }
+
+    // New method to get reward summary text
+    getRewardSummaryText(achievement) {
+        const reward = achievement.reward;
+        const parts = [];
+
+        if (reward.vc) {
+            parts.push(`${reward.vc.toLocaleString()} VC`);
+        }
+
+        if (reward.xp) {
+            parts.push(`${reward.xp} XP`);
+        }
+
+        if (reward.lootbox) {
+            const quantity = reward.quantity || 1;
+            const boxName = this.getLootboxDisplayName(reward.lootbox);
+            parts.push(`${quantity}x ${boxName}`);
+        }
+
+        return parts.join(' + ') || 'Brak nagród';
+    }
+
+    // Helper method to get lootbox display name
+    getLootboxDisplayName(lootboxType) {
+        const names = {
+            common: 'Zwykła Skrzynka',
+            rare: 'Rzadka Skrzynka', 
+            epic: 'Epicka Skrzynka',
+            train_pack: 'Paczka Kolejowa',
+            plane_pack: 'Paczka Lotnicza',
+            bus_pack: 'Paczka Autobusowa',
+            tube_pack: 'Paczka Metra'
+        };
+        return names[lootboxType] || 'Skrzynka';
     }
 
     // Get achievement statistics

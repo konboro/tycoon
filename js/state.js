@@ -1,9 +1,10 @@
 import { config } from './config.js'; // Potrzebne do obliczeń wartości
 import { ACHIEVEMENTS, AchievementManager, initializeAchievements } from './achievements.js';
 import { showNotification } from './notifications.js';
+import { createLootboxManager } from './lootbox-manager.js';
 export const state = {
   vehicles: { plane: new Map(), train: new Map(), tube: new Map(), bus: new Map(), bike: new Map(), 'river-bus': new Map(), tram: new Map() },
-  profile: { companyName: null, logo: '🏢', color: 'blue', level: 1, xp: 0, km_total: 0, total_earned: 0, reputation: {}, minutes_in_transit: 0, earnings_history: [], dailyEarningsHistory: [], services_done: 0, upgrades_done: 0, transaction_history: [], friends: [] },
+  profile: { companyName: null, logo: '🏢', color: 'blue', level: 1, xp: 0, km_total: 0, total_earned: 0, reputation: {}, minutes_in_transit: 0, earnings_history: [], dailyEarningsHistory: [], services_done: 0, upgrades_done: 0, lootboxes_opened: 0,transaction_history: [], friends: [] },
   wallet: 900000000,
   owned: {},
   economy: { energyPrices: {} },
@@ -23,6 +24,7 @@ export const state = {
   lastPos: new Map(),
   globalTaken: new Set(),
   achievements: {}, 
+  pendingLootboxes: [],
   marketDemand: {},
   filters: { types: ['plane', 'train', 'tube', 'tram', 'bus', 'bike', 'river-bus'], countries: ['Poland', 'USA', 'Finland', 'UK', 'Europe'], rarities: ['common', 'rare', 'epic', 'legendary'], mapView: 'all' },
   activeTab: null,
@@ -42,6 +44,8 @@ export const achievementManager = new AchievementManager(state);
 
 // Export achievements for backward compatibility
 export const achievementsList = ACHIEVEMENTS;
+
+export const lootboxManager = createLootboxManager(state);
 
 // Definicja mapy
 export const map = (typeof L !== 'undefined') ? L.map('map', { zoomControl: true }).setView([52.23, 21.01], 6) : null;
